@@ -19,11 +19,17 @@ import { AdminDashboard } from './components/AdminDashboard';
 
 const LS_STATE_KEY = 'zerotofab_site_state_v3';
 const LS_COMPLETED_KEY = 'tracecraft_completed_v1';
+const DEFAULT_FAVICON = `${import.meta.env.BASE_URL}favicon.svg?v=3`;
 
 function isAdminLocation(): boolean {
+  const base = import.meta.env.BASE_URL.replace(/\/+$/, '');
   const path = window.location.pathname.replace(/\/+$/, '');
   const hash = window.location.hash;
-  return path === '/admin' || hash === '#/admin' || hash.startsWith('#/admin/');
+  return (
+    path === `${base}/admin` ||
+    hash === '#/admin' ||
+    hash.startsWith('#/admin/')
+  );
 }
 
 function loadInitialState(): FullSiteState {
@@ -85,7 +91,7 @@ export function App() {
   // Sync browser tab title & dynamic favicon with Admin branding settings
   useEffect(() => {
     document.title = `${siteState.profile.brandName} — ${siteState.profile.heroTitle}`;
-    const iconHref = siteState.profile.siteIconDataUrl || '/favicon.svg?v=3';
+    const iconHref = siteState.profile.siteIconDataUrl || DEFAULT_FAVICON;
     let link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
     if (!link) {
       link = document.createElement('link');
@@ -129,7 +135,7 @@ export function App() {
   };
 
   const navigatePublic = () => {
-    window.history.pushState({}, '', '/');
+    window.history.pushState({}, '', import.meta.env.BASE_URL);
     setIsAdminRoute(false);
   };
 

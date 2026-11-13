@@ -114,7 +114,10 @@ export const AdminSectionsPanel: React.FC<AdminSectionsPanelProps> = ({
             <div className="flex items-center gap-3 min-w-0">
               <div className="w-10 h-10 rounded-lg bg-[#141413] border border-[#141413] overflow-hidden flex items-center justify-center shrink-0">
                 <img
-                  src={profile.siteIconDataUrl || '/favicon.svg?v=3'}
+                  src={
+                    profile.siteIconDataUrl ||
+                    `${import.meta.env.BASE_URL}favicon.svg?v=3`
+                  }
                   alt="Site Icon"
                   className="w-full h-full object-contain"
                 />

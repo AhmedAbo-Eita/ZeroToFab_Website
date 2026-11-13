@@ -49,6 +49,16 @@ npm run build
 npm run preview
 ```
 
+## Deployment (GitHub Pages)
+
+This repository includes a GitHub Actions workflow at `.github/workflows/deploy.yml` that builds and deploys the site automatically on every push to `main`.
+
+1. In your GitHub repository, open **Settings → Pages**.
+2. Under **Build and deployment → Source**, select **GitHub Actions**.
+3. Push to `main` (or trigger the **Deploy to GitHub Pages** workflow manually under **Actions**).
+
+Once deployed, the site will be live at `https://ahmedabo-eita.github.io/ZeroToFab_Website/` (and the admin dashboard at `/#/admin`).
+
 ## Project Structure
 
 ```text
