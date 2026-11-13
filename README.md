@@ -10,9 +10,11 @@ An interactive web platform and course showcase for **ZeroToFab**, a beginner-to
   - Interactive curriculum browser with level filtering, live countdown timer, and an embedded **Course Player Modal** supporting lesson notes, downloadable attachments, and `localStorage`-persisted lesson completion tracking.
   - Testimonials marquee, Content Lab video showcase, and instructor bio section.
 - **Built-in Admin Dashboard (`/admin` or `#/admin`)**:
-  - Manage course modules, lessons, attachments, and media sources (demo, YouTube, MP4, Google Drive, or local uploads via IndexedDB).
-  - Customize branding (brand name, hero copy, dynamic page title and favicon), toggle page sections, edit masterclasses, testimonials, and lab videos.
-  - Optional passcode lock and reset-to-defaults support, persisted in `localStorage`.
+  - Manage course modules, lessons, attachments, and media sources (demo, YouTube, MP4, Google Drive with optional public/private visibility toggle, or local uploads via IndexedDB).
+  - Customize branding (brand name, hero copy, dynamic page title and raster favicon), toggle page sections, edit masterclasses, testimonials, and lab videos.
+  - PBKDF2-SHA256 password protection (with first-time setup or `VITE_ADMIN_PASSWORD_HASH` pre-lock, 5-attempt exponential lockout, and 30-minute idle auto-lock), URL/media sanitization, and JSON backup/reset persisted in `localStorage`.
+
+See [SECURITY.md](./SECURITY.md) for deployment hardening, edge protection, and Content Security Policy details.
 
 ## Tech Stack
 
@@ -39,10 +41,13 @@ npm install
 npm run dev
 ```
 
-### Build & Preview
+### Build, Preview & Admin Password Hash
 
 ```bash
-# Type-check and build for production
+# Generate a salted PBKDF2-SHA256 hash for GitHub Secret VITE_ADMIN_PASSWORD_HASH
+npm run hash-password
+
+# Type-check and build for production (injects production CSP meta tag)
 npm run build
 
 # Preview the production build locally
@@ -63,11 +68,14 @@ Once deployed, the site will be live at `https://ahmedabo-eita.github.io/ZeroToF
 
 ```text
 ├── public/
+│   ├── _headers                 # Security headers for Cloudflare Pages / Netlify
 │   └── favicon.svg
+├── scripts/
+│   └── hash-admin-password.mjs  # CLI generator for VITE_ADMIN_PASSWORD_HASH
 ├── src/
 │   ├── components/
 │   │   ├── admin/               # Admin panels (courses, sections, extras)
-│   │   ├── AdminDashboard.tsx   # Admin route (/admin or #/admin)
+│   │   ├── AdminDashboard.tsx   # Password-protected Admin CMS (/admin or #/admin)
 │   │   ├── CoursePlayerModal.tsx
 │   │   ├── CurriculumSection.tsx
 │   │   └── ...                  # Landing page sections & UI components
@@ -77,10 +85,12 @@ Once deployed, the site will be live at `https://ahmedabo-eita.github.io/ZeroToF
 │   │   └── course.ts            # TypeScript interfaces
 │   ├── utils/
 │   │   ├── googleDrive.ts       # Google Drive media helpers
-│   │   └── mediaStorage.ts      # IndexedDB local media storage
+│   │   ├── mediaStorage.ts      # IndexedDB local media storage
+│   │   └── security.ts          # PBKDF2 auth, lockout, session TTL, URL/image sanitizers
 │   ├── App.tsx
 │   ├── index.css
 │   └── main.tsx
+├── SECURITY.md                  # Security & deployment hardening guide
 ├── index.html
 ├── package.json
 ├── tsconfig.json
