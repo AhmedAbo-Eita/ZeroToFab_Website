@@ -1,0 +1,170 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  /* Claude-inspired Warm Terracotta + Parchment + Charcoal Palette */
+  --color-cream: #FAF9F5;
+  --color-cream-dark: #F0EEE6;
+  --color-cream-border: #E8E6DC;
+  --color-charcoal: #141413;
+  --color-charcoal-card: #1C1C1A;
+  --color-charcoal-border: #2E2D2A;
+  --color-terracotta: #D97757;
+  --color-terracotta-bright: #E87A54;
+  --color-terracotta-deep: #C96442;
+  --color-copper: #E5984B;
+  --color-muted: #5C5A54;
+}
+
+@layer base {
+  body {
+    font-family: var(--font-sans);
+    background-color: #FAF9F5;
+    color: #141413;
+    overflow-x: hidden;
+  }
+}
+
+/* Neo-Brutalist Display Text Stroke (matching yehia.tech headline punch) */
+.brutal-display {
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  -webkit-text-stroke: 0.025em currentColor;
+  paint-order: stroke fill;
+}
+
+/* Neo-Brutalist Hard Shadows */
+.brutal-shadow {
+  box-shadow: 4px 4px 0px 0px #141413;
+}
+
+.brutal-shadow-sm {
+  box-shadow: 3px 3px 0px 0px #141413;
+}
+
+.brutal-shadow-orange {
+  box-shadow: 4px 4px 0px 0px #D97757;
+}
+
+.brutal-btn {
+  border: 2px solid #141413;
+  box-shadow: 4px 4px 0px 0px #141413;
+  transition: transform 0.16s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.16s cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 0.16s ease;
+}
+
+.brutal-btn:hover {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0px 0px #141413;
+}
+
+.brutal-btn:active {
+  transform: translate(4px, 4px);
+  box-shadow: 0px 0px 0px 0px #141413;
+}
+
+.brutal-card {
+  border: 2px solid #141413;
+  box-shadow: 4px 4px 0px 0px #141413;
+  transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.brutal-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 6px 8px 0px 0px #141413;
+}
+
+/* Marquee Animations */
+@keyframes marquee-left {
+  0% {
+    transform: translateX(0%);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes marquee-right {
+  0% {
+    transform: translateX(-50%);
+  }
+  100% {
+    transform: translateX(0%);
+  }
+}
+
+.animate-marquee-left {
+  display: flex;
+  width: max-content;
+  animation: marquee-left 34s linear infinite;
+}
+
+.animate-marquee-right {
+  display: flex;
+  width: max-content;
+  animation: marquee-right 38s linear infinite;
+}
+
+.marquee-wrapper:hover .animate-marquee-left,
+.marquee-wrapper:hover .animate-marquee-right {
+  animation-play-state: paused;
+}
+
+/* Floating 3D PCB Elements in Hero */
+@keyframes float-slow {
+  0%, 100% {
+    transform: translateY(0px) rotate(-6deg);
+  }
+  50% {
+    transform: translateY(-14px) rotate(-2deg);
+  }
+}
+
+@keyframes float-medium {
+  0%, 100% {
+    transform: translateY(0px) rotate(8deg);
+  }
+  50% {
+    transform: translateY(-18px) rotate(13deg);
+  }
+}
+
+@keyframes float-reverse {
+  0%, 100% {
+    transform: translateY(0px) rotate(-10deg);
+  }
+  50% {
+    transform: translateY(14px) rotate(-5deg);
+  }
+}
+
+.animate-float-slow {
+  animation: float-slow 6s ease-in-out infinite;
+}
+
+.animate-float-medium {
+  animation: float-medium 5s ease-in-out infinite;
+}
+
+.animate-float-reverse {
+  animation: float-reverse 7s ease-in-out infinite;
+}
+
+/* Subtle PCB Grid Pattern */
+.pcb-grid-bg {
+  background-image:
+    radial-gradient(circle, rgba(217, 119, 87, 0.14) 1px, transparent 1px),
+    linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 28px 28px, 56px 56px, 56px 56px;
+}
+
+.pcb-grid-light {
+  background-image:
+    radial-gradient(circle, rgba(20, 20, 19, 0.09) 1px, transparent 1px);
+  background-size: 24px 24px;
+}

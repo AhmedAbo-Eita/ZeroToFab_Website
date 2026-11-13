@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <!-- Subtle squircle backing for crisp browser-tab favicon legibility -->
+  <rect width="64" height="64" rx="14" fill="#FAF9F5" />
+  <rect x="1.5" y="1.5" width="61" height="61" rx="12.5" stroke="#141413" stroke-width="2" stroke-opacity="0.15" />
+
+  <!-- Layer 4 (Bottom): Terracotta #D97757 -->
+  <path d="M9 40 C9 38.5 10.5 37.5 12 36.8 L29 29.2 C31 28.3 33 28.3 35 29.2 L52 36.8 C53.5 37.5 55 38.5 55 40 V44.5 C55 46 53.5 47 52 47.7 L35 55.3 C33 56.2 31 56.2 29 55.3 L12 47.7 C10.5 47 9 46 9 44.5 Z" fill="#C96442" stroke="#141413" stroke-width="2.2" stroke-linejoin="round" />
+  <path d="M10 39.5 L29.5 30.8 C31.1 30.1 32.9 30.1 34.5 30.8 L54 39.5 L34.5 48.2 C32.9 48.9 31.1 48.9 29.5 48.2 Z" fill="#D97757" stroke="#141413" stroke-width="2" stroke-linejoin="round" />
+
+  <!-- Layer 3: Copper Gold #E5984B -->
+  <path d="M9 33 C9 31.5 10.5 30.5 12 29.8 L29 22.2 C31 21.3 33 21.3 35 22.2 L52 29.8 C53.5 30.5 55 31.5 55 33 V37.5 C55 39 53.5 40 52 40.7 L35 48.3 C33 49.2 31 49.2 29 48.3 L12 40.7 C10.5 40 9 39 9 37.5 Z" fill="#D48436" stroke="#141413" stroke-width="2.2" stroke-linejoin="round" />
+  <path d="M10 32.5 L29.5 23.8 C31.1 23.1 32.9 23.1 34.5 23.8 L54 32.5 L34.5 41.2 C32.9 41.9 31.1 41.9 29.5 41.2 Z" fill="#E5984B" stroke="#141413" stroke-width="2" stroke-linejoin="round" />
+
+  <!-- Layer 2: Parchment Cream #FAF9F5 -->
+  <path d="M9 26 C9 24.5 10.5 23.5 12 22.8 L29 15.2 C31 14.3 33 14.3 35 15.2 L52 22.8 C53.5 23.5 55 24.5 55 26 V30.5 C55 32 53.5 33 52 33.7 L35 41.3 C33 42.2 31 42.2 29 41.3 L12 33.7 C10.5 33 9 32 9 30.5 Z" fill="#E8E6DC" stroke="#141413" stroke-width="2.2" stroke-linejoin="round" />
+  <path d="M10 25.5 L29.5 16.8 C31.1 16.1 32.9 16.1 34.5 16.8 L54 25.5 L34.5 34.2 C32.9 34.9 31.1 34.9 29.5 34.2 Z" fill="#FAF9F5" stroke="#141413" stroke-width="2" stroke-linejoin="round" />
+
+  <!-- Layer 1 (Top): Charcoal #141413 -->
+  <path d="M9 19 C9 17.5 10.5 16.5 12 15.8 L29 8.2 C31 7.3 33 7.3 35 8.2 L52 15.8 C53.5 16.5 55 17.5 55 19 V23.5 C55 25 53.5 26 52 26.7 L35 34.3 C33 35.2 31 35.2 29 34.3 L12 26.7 C10.5 26 9 25 9 23.5 Z" fill="#141413" stroke="#141413" stroke-width="2.2" stroke-linejoin="round" />
+  <path d="M10 18.5 L29.5 9.8 C31.1 9.1 32.9 9.1 34.5 9.8 L54 18.5 L34.5 27.2 C32.9 27.9 31.1 27.9 29.5 27.2 Z" fill="#1C1C1A" stroke="#141413" stroke-width="1.8" stroke-linejoin="round" />
+
+  <!-- Center Plated-Through Copper Via -->
+  <ellipse cx="32" cy="18.5" rx="8.2" ry="4.4" fill="#E5984B" stroke="#141413" stroke-width="1.6" />
+  <ellipse cx="32" cy="18.5" rx="4.2" ry="2.2" fill="#141413" />
+</svg>
