@@ -16,11 +16,17 @@ import { InstructorBioSection } from './components/InstructorBioSection';
 import { Footer } from './components/Footer';
 import { CoursePlayerModal } from './components/CoursePlayerModal';
 import { AdminDashboard } from './components/AdminDashboard';
+import {
+  getEnvAdminPasswordHash,
+  hashAdminPassword,
+  sanitizeImageSrc,
+} from './utils/security';
 
 const LS_STATE_KEY = 'zerotofab_site_state_v3';
 const LS_COMPLETED_KEY = 'tracecraft_completed_v1';
 const DEFAULT_FAVICON = `${import.meta.env.BASE_URL}favicon.svg?v=3`;
 
+/** Matches `/admin` (under subpath deployments like GitHub Pages) or `#/admin` hash routes. */
 function isAdminLocation(): boolean {
   const base = import.meta.env.BASE_URL.replace(/\/+$/, '');
   const path = window.location.pathname.replace(/\/+$/, '');
@@ -32,32 +38,91 @@ function isAdminLocation(): boolean {
   );
 }
 
-function loadInitialState(): FullSiteState {
+/**
+ * Loads persisted site state from `localStorage`, validates security metadata,
+ * strips legacy plaintext passcodes, and schedules migration for custom legacy passwords.
+ */
+function loadInitialState(): {
+  state: FullSiteState;
+  legacyCustomPasscode?: string;
+} {
   try {
     const raw = localStorage.getItem(LS_STATE_KEY);
     if (raw) {
-      const parsed = JSON.parse(raw) as Partial<FullSiteState>;
+      const parsed = JSON.parse(raw) as Partial<FullSiteState> & {
+        security?: {
+          passcodeEnabled?: boolean;
+          passcodeHash?: string;
+          passcode?: string;
+        };
+      };
+      const rawSec = parsed.security;
+      const hasLegacyCustom =
+        Boolean(rawSec?.passcodeEnabled) &&
+        typeof rawSec?.passcode === 'string' &&
+        rawSec.passcode.length > 0 &&
+        rawSec.passcode !== 'admin123' &&
+        !rawSec.passcodeHash;
+
+      const sanitizedHash =
+        typeof rawSec?.passcodeHash === 'string' &&
+        rawSec.passcodeHash.startsWith('pbkdf2-sha256$')
+          ? rawSec.passcodeHash
+          : '';
+
+      const passcodeEnabled =
+        typeof rawSec?.passcodeEnabled === 'boolean'
+          ? rawSec.passcodeEnabled || (!sanitizedHash && !getEnvAdminPasswordHash())
+          : true;
+
       return {
-        ...DEFAULT_SITE_STATE,
-        ...parsed,
-        profile: { ...DEFAULT_SITE_STATE.profile, ...parsed.profile },
-        sections: { ...DEFAULT_SITE_STATE.sections, ...parsed.sections },
-        driveConfig: {
-          ...DEFAULT_SITE_STATE.driveConfig,
-          ...parsed.driveConfig,
+        state: {
+          ...DEFAULT_SITE_STATE,
+          ...parsed,
+          profile: { ...DEFAULT_SITE_STATE.profile, ...parsed.profile },
+          sections: { ...DEFAULT_SITE_STATE.sections, ...parsed.sections },
+          driveConfig: {
+            ...DEFAULT_SITE_STATE.driveConfig,
+            ...parsed.driveConfig,
+          },
+          security: {
+            passcodeEnabled,
+            passcodeHash: sanitizedHash,
+          },
         },
-        security: { ...DEFAULT_SITE_STATE.security, ...parsed.security },
+        legacyCustomPasscode: hasLegacyCustom ? rawSec?.passcode : undefined,
       };
     }
   } catch {
     // fallback to defaults
   }
-  return DEFAULT_SITE_STATE;
+  return { state: DEFAULT_SITE_STATE };
 }
 
 export function App() {
-  const [siteState, setSiteState] = useState<FullSiteState>(loadInitialState);
+  const [initial] = useState(loadInitialState);
+  const [siteState, setSiteState] = useState<FullSiteState>(initial.state);
   const [isAdminRoute, setIsAdminRoute] = useState<boolean>(isAdminLocation);
+
+  // Migrate any legacy non-default plaintext passcode to PBKDF2 hash and scrub plaintext
+  useEffect(() => {
+    const legacy = initial.legacyCustomPasscode;
+    if (!legacy) return;
+    let cancelled = false;
+    hashAdminPassword(legacy).then((hashed) => {
+      if (cancelled) return;
+      setSiteState((prev) => ({
+        ...prev,
+        security: {
+          passcodeEnabled: true,
+          passcodeHash: prev.security.passcodeHash || hashed,
+        },
+      }));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [initial.legacyCustomPasscode]);
 
   const [completedLessonIds, setCompletedLessonIds] = useState<string[]>(() => {
     try {
@@ -91,7 +156,8 @@ export function App() {
   // Sync browser tab title & dynamic favicon with Admin branding settings
   useEffect(() => {
     document.title = `${siteState.profile.brandName} — ${siteState.profile.heroTitle}`;
-    const iconHref = siteState.profile.siteIconDataUrl || DEFAULT_FAVICON;
+    const iconHref =
+      sanitizeImageSrc(siteState.profile.siteIconDataUrl) || DEFAULT_FAVICON;
     let link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
     if (!link) {
       link = document.createElement('link');

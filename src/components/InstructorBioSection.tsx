@@ -2,6 +2,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { InstructorProfile, SkillPill } from '../types/course';
 import { BrushUnderline } from './BrandMark';
+import { sanitizeImageSrc } from '../utils/security';
 
 interface InstructorBioSectionProps {
   profile: InstructorProfile;
@@ -23,6 +24,7 @@ export const InstructorBioSection: React.FC<InstructorBioSectionProps> = ({
   headingPrefix,
   skillPills,
 }) => {
+  const safePhotoUrl = sanitizeImageSrc(profile.photoDataUrl);
   return (
     <section
       id="about"
@@ -73,9 +75,9 @@ export const InstructorBioSection: React.FC<InstructorBioSectionProps> = ({
             <div className="absolute inset-4 bg-[#D97757] border-[3px] border-[#141413] rounded-3xl rotate-[-4deg] shadow-[6px_6px_0px_#141413]" />
 
             <div className="relative z-10 w-64 sm:w-72 h-72 bg-[#141413] border-[3px] border-[#141413] rounded-2xl overflow-hidden flex flex-col items-center justify-center p-5">
-              {profile.photoDataUrl ? (
+              {safePhotoUrl ? (
                 <img
-                  src={profile.photoDataUrl}
+                  src={safePhotoUrl}
                   alt={profile.name}
                   className="w-full h-full object-cover rounded-xl"
                 />

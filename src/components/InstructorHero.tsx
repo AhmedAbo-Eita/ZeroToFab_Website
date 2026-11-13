@@ -4,6 +4,7 @@ import { ArrowRight, Star } from 'lucide-react';
 import { InstructorProfile } from '../types/course';
 import { BrushUnderline } from './BrandMark';
 import { AnimatedCounter } from './AnimatedCounter';
+import { sanitizeImageSrc } from '../utils/security';
 
 interface InstructorHeroProps {
   profile: InstructorProfile;
@@ -17,6 +18,7 @@ export const InstructorHero: React.FC<InstructorHeroProps> = ({
   const words = profile.headline.trim().split(' ');
   const lastWord = words.pop() || 'ZeroToFab.';
   const leading = words.join(' ');
+  const safePhotoUrl = sanitizeImageSrc(profile.photoDataUrl);
 
   return (
     <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16 lg:py-20">
@@ -114,9 +116,9 @@ export const InstructorHero: React.FC<InstructorHeroProps> = ({
             <div className="absolute inset-4 rounded-full bg-[#D97757] border-2 border-[#141413] translate-x-3 translate-y-3 transition-transform duration-300 group-hover:translate-x-4 group-hover:translate-y-4" />
 
             <div className="relative w-64 h-64 sm:w-80 sm:h-80 rounded-full bg-[#141413] border-[3px] border-[#141413] overflow-hidden flex items-center justify-center shadow-[0_10px_25px_rgba(20,20,19,0.18)]">
-              {profile.photoDataUrl ? (
+              {safePhotoUrl ? (
                 <img
-                  src={profile.photoDataUrl}
+                  src={safePhotoUrl}
                   alt={profile.name}
                   className="w-full h-full object-cover"
                 />

@@ -6,6 +6,14 @@ import {
   SiteSectionsConfig,
   SkillPill,
 } from '../../types/course';
+import { sanitizeImageSrc } from '../../utils/security';
+
+const ALLOWED_RASTER_TYPES = new Set([
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+  'image/gif',
+]);
 
 interface AdminSectionsPanelProps {
   profile: InstructorProfile;
@@ -22,31 +30,63 @@ export const AdminSectionsPanel: React.FC<AdminSectionsPanelProps> = ({
   onUpdateSections,
   onNotify,
 }) => {
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  /**
+   * Validates a user-selected raster image (type + size), sanitizes the resulting
+   * data URI (blocking SVG payloads), and forwards it to `onSuccess`.
+   */
+  const handleRasterImageUpload = (
+    e: React.ChangeEvent<HTMLInputElement>,
+    maxBytes: number,
+    rejectedTypeMessage: string,
+    maxSizeLabel: string,
+    onSuccess: (safeDataUrl: string) => void
+  ) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (!ALLOWED_RASTER_TYPES.has(file.type)) {
+      onNotify(rejectedTypeMessage);
+      return;
+    }
+    if (file.size > maxBytes) {
+      onNotify(`File must be under ${maxSizeLabel}.`);
+      return;
+    }
     const reader = new FileReader();
     reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        onUpdateProfile({ ...profile, photoDataUrl: reader.result });
-        onNotify('Instructor photo updated!');
+      if (typeof reader.result !== 'string') return;
+      const safe = sanitizeImageSrc(reader.result);
+      if (!safe) {
+        onNotify('Unsupported image format.');
+        return;
       }
+      onSuccess(safe);
     };
     reader.readAsDataURL(file);
   };
 
-  const handleSiteIconUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        onUpdateProfile({ ...profile, siteIconDataUrl: reader.result });
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) =>
+    handleRasterImageUpload(
+      e,
+      2 * 1024 * 1024,
+      'Please upload a PNG, JPG, WEBP, or GIF image.',
+      '2 MB',
+      (safe) => {
+        onUpdateProfile({ ...profile, photoDataUrl: safe });
+        onNotify('Instructor photo updated!');
+      }
+    );
+
+  const handleSiteIconUpload = (e: React.ChangeEvent<HTMLInputElement>) =>
+    handleRasterImageUpload(
+      e,
+      1024 * 1024,
+      'Please upload a PNG, JPG, WEBP, or GIF icon (SVG uploads blocked for security).',
+      '1 MB',
+      (safe) => {
+        onUpdateProfile({ ...profile, siteIconDataUrl: safe });
         onNotify('Website icon & favicon updated!');
       }
-    };
-    reader.readAsDataURL(file);
-  };
+    );
 
   return (
     <div className="space-y-8">
@@ -115,7 +155,7 @@ export const AdminSectionsPanel: React.FC<AdminSectionsPanelProps> = ({
               <div className="w-10 h-10 rounded-lg bg-[#141413] border border-[#141413] overflow-hidden flex items-center justify-center shrink-0">
                 <img
                   src={
-                    profile.siteIconDataUrl ||
+                    sanitizeImageSrc(profile.siteIconDataUrl) ||
                     `${import.meta.env.BASE_URL}favicon.svg?v=3`
                   }
                   alt="Site Icon"

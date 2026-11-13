@@ -618,7 +618,7 @@ export const DEFAULT_SITE_STATE: FullSiteState = {
     defaultOnDemand: true,
   },
   security: {
-    passcodeEnabled: false,
-    passcode: 'admin123',
+    passcodeEnabled: true,
+    passcodeHash: '',
   },
 };

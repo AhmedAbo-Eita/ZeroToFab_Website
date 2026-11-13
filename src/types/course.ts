@@ -205,7 +205,8 @@ export interface GoogleDriveConfig {
 
 export interface AdminSecurityConfig {
   passcodeEnabled: boolean;
-  passcode: string;
+  /** PBKDF2-SHA256 hash in the format pbkdf2-sha256$<iterations>$<saltB64>$<hashB64> */
+  passcodeHash: string;
 }
 
 export interface FullSiteState {

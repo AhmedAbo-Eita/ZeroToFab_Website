@@ -2,6 +2,7 @@ import React from 'react';
 import { Youtube, Linkedin, Github } from 'lucide-react';
 import { SiteSectionsConfig } from '../types/course';
 import { BrandMark } from './BrandMark';
+import { sanitizeExternalUrl, sanitizeImageSrc } from '../utils/security';
 
 interface FooterProps {
   brandName: string;
@@ -22,7 +23,7 @@ export const Footer: React.FC<FooterProps> = ({
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-10 pb-12 border-b border-[#2E2D2A]">
           <div>
             <div className="flex items-center gap-3 mb-4">
-              <BrandMark dark customIconUrl={siteIconUrl} className="w-8 h-8" />
+              <BrandMark dark customIconUrl={sanitizeImageSrc(siteIconUrl)} className="w-8 h-8" />
               <span className="font-bold text-lg tracking-tight">
                 {brandName}
               </span>
@@ -35,18 +36,22 @@ export const Footer: React.FC<FooterProps> = ({
                 { icon: Youtube, label: 'YouTube', href: sections.footerYoutubeUrl },
                 { icon: Linkedin, label: 'LinkedIn', href: sections.footerLinkedinUrl },
                 { icon: Github, label: 'GitHub', href: sections.footerGithubUrl },
-              ].map(({ icon: Icon, label, href }) => (
+              ].map(({ icon: Icon, label, href }) => {
+                const safeHref =
+                  sanitizeExternalUrl(href, { allowRelativeHash: true }) || '#top';
+                return (
                 <a
                   key={label}
-                  href={href || '#top'}
-                  target={href?.startsWith('http') ? '_blank' : undefined}
+                  href={safeHref}
+                  target={safeHref.startsWith('http') ? '_blank' : undefined}
                   rel="noopener noreferrer"
                   aria-label={label}
                   className="w-9 h-9 rounded border border-[#2E2D2A] hover:border-[#D97757] hover:bg-[#D97757] hover:text-[#141413] flex items-center justify-center transition-colors"
                 >
                   <Icon className="w-4 h-4" />
                 </a>
-              ))}
+                );
+              })}
             </div>
           </div>
 

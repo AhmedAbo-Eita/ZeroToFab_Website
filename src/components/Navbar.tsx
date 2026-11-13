@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { BookOpen, X } from 'lucide-react';
 import { BrandMark } from './BrandMark';
+import { sanitizeImageSrc } from '../utils/security';
 
 interface NavbarProps {
   brandName: string;
@@ -49,7 +50,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           className="flex items-center gap-3 group focus:outline-none"
         >
           <BrandMark
-            customIconUrl={siteIconUrl}
+            customIconUrl={sanitizeImageSrc(siteIconUrl)}
             className="w-9 h-9 transition-transform duration-200 group-hover:rotate-[-6deg]"
           />
           <span className="font-bold text-lg tracking-tight hidden sm:inline">

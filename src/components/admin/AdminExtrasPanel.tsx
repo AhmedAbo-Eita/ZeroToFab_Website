@@ -1,10 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
+  AlertTriangle,
   Download,
   HardDrive,
   Lock,
   Plus,
   RotateCcw,
+  ShieldCheck,
   Trash2,
   Upload,
 } from 'lucide-react';
@@ -19,6 +21,13 @@ import {
   TestimonialItem,
 } from '../../types/course';
 import { extractGoogleDriveFileId } from '../../utils/googleDrive';
+import {
+  getEnvAdminPasswordHash,
+  hashAdminPassword,
+  touchAdminSession,
+  validatePasswordStrength,
+  verifyAdminPassword,
+} from '../../utils/security';
 
 interface AdminExtrasPanelProps {
   mode: 'masterclasses' | 'testimonials' | 'lab' | 'settings';
@@ -39,6 +48,12 @@ export const AdminExtrasPanel: React.FC<AdminExtrasPanelProps> = ({
   onResetDefaults,
   onNotify,
 }) => {
+  const [currentPwd, setCurrentPwd] = useState('');
+  const [newPwd, setNewPwd] = useState('');
+  const [confirmPwd, setConfirmPwd] = useState('');
+  const [pwdError, setPwdError] = useState<string | null>(null);
+  const [savingPwd, setSavingPwd] = useState(false);
+
   const {
     sections,
     masterclasses,
@@ -592,8 +607,48 @@ export const AdminExtrasPanel: React.FC<AdminExtrasPanelProps> = ({
   const updateSec = (patch: Partial<AdminSecurityConfig>) =>
     onUpdateState({ security: { ...security, ...patch } });
 
+  const effectiveHash = security.passcodeHash || getEnvAdminPasswordHash();
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPwdError(null);
+
+    if (effectiveHash) {
+      const ok = await verifyAdminPassword(currentPwd, effectiveHash);
+      if (!ok) {
+        setPwdError('Current password is incorrect.');
+        return;
+      }
+    }
+
+    const strengthErr = validatePasswordStrength(newPwd);
+    if (strengthErr) {
+      setPwdError(strengthErr);
+      return;
+    }
+    if (newPwd !== confirmPwd) {
+      setPwdError('New passwords do not match.');
+      return;
+    }
+
+    setSavingPwd(true);
+    try {
+      const hashed = await hashAdminPassword(newPwd);
+      updateSec({ passcodeEnabled: true, passcodeHash: hashed });
+      touchAdminSession(hashed);
+      setCurrentPwd('');
+      setNewPwd('');
+      setConfirmPwd('');
+      onNotify('Admin password updated and hashed with PBKDF2-SHA256.');
+    } finally {
+      setSavingPwd(false);
+    }
+  };
+
   const handleExport = () => {
-    const blob = new Blob([JSON.stringify(state, null, 2)], {
+    // Strip security credentials/hashes from exported site backups
+    const { security: _omittedSecurity, ...publicState } = state;
+    const blob = new Blob([JSON.stringify(publicState, null, 2)], {
       type: 'application/json',
     });
     const url = URL.createObjectURL(blob);
@@ -602,7 +657,7 @@ export const AdminExtrasPanel: React.FC<AdminExtrasPanelProps> = ({
     a.download = 'pcb-masterclass-site-config.json';
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-    onNotify('Exported full site configuration JSON!');
+    onNotify('Exported site configuration JSON (security credentials excluded)!');
   };
 
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -611,9 +666,16 @@ export const AdminExtrasPanel: React.FC<AdminExtrasPanelProps> = ({
     const reader = new FileReader();
     reader.onload = () => {
       try {
-        const parsed = JSON.parse(String(reader.result)) as Partial<FullSiteState>;
-        onUpdateState(parsed);
-        onNotify('Imported full site configuration!');
+        const raw = JSON.parse(String(reader.result));
+        if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+          onNotify('Invalid JSON structure.');
+          return;
+        }
+        const parsed = raw as Partial<FullSiteState>;
+        // Never allow an imported JSON backup to overwrite or disable admin security
+        const { security: _ignored, ...safePatch } = parsed;
+        onUpdateState(safePatch);
+        onNotify('Imported site configuration safely (security lock preserved)!');
       } catch {
         onNotify('Invalid JSON configuration file.');
       }
@@ -691,31 +753,93 @@ export const AdminExtrasPanel: React.FC<AdminExtrasPanelProps> = ({
         </label>
       </div>
 
-      {/* Admin Passcode Protection */}
-      <div className="p-6 bg-[#FFFFFF] border-2 border-[#141413] rounded-xl shadow-[4px_4px_0px_#141413] space-y-4">
-        <h3 className="text-lg font-bold flex items-center gap-2">
-          <Lock className="w-5 h-5 text-[#C96442]" />
-          <span>Admin Dashboard Passcode Lock</span>
-        </h3>
+      {/* Admin Password Protection & Security Posture */}
+      <div className="p-6 bg-[#FFFFFF] border-2 border-[#141413] rounded-xl shadow-[4px_4px_0px_#141413] space-y-5">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <h3 className="text-lg font-bold flex items-center gap-2">
+            <Lock className="w-5 h-5 text-[#C96442]" />
+            <span>Admin Dashboard Password &amp; Security</span>
+          </h3>
+          <span
+            className={`px-2.5 py-1 rounded border border-[#141413] font-mono text-[11px] font-bold ${
+              security.passcodeEnabled && effectiveHash
+                ? 'bg-[#D97757] text-[#141413]'
+                : 'bg-[#F0EEE6] text-[#5C5A54]'
+            }`}
+          >
+            {security.passcodeEnabled && effectiveHash
+              ? 'PBKDF2-SHA256 PROTECTED'
+              : 'LOCK DISABLED'}
+          </span>
+        </div>
 
-        <div className="flex flex-wrap items-center gap-4">
-          <label className="inline-flex items-center gap-2 text-sm font-bold cursor-pointer">
-            <input
-              type="checkbox"
-              checked={security.passcodeEnabled}
-              onChange={(e) => updateSec({ passcodeEnabled: e.target.checked })}
-              className="w-4 h-4 accent-[#D97757]"
-            />
-            Require passcode when opening /admin
-          </label>
-
+        <label className="inline-flex items-center gap-2 text-sm font-bold cursor-pointer">
           <input
-            type="text"
-            value={security.passcode}
-            onChange={(e) => updateSec({ passcode: e.target.value })}
-            placeholder="Passcode"
-            className="px-3 py-2 bg-[#FAF9F5] border-2 border-[#141413] rounded text-sm font-mono"
+            type="checkbox"
+            checked={security.passcodeEnabled}
+            onChange={(e) => updateSec({ passcodeEnabled: e.target.checked })}
+            className="w-4 h-4 accent-[#D97757]"
           />
+          Require password when opening /admin
+        </label>
+
+        <form onSubmit={handleChangePassword} className="space-y-3 pt-2 border-t border-[#E8E6DC]">
+          <div className="font-mono text-xs font-bold uppercase text-[#5C5A54]">
+            Update Admin Password
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {effectiveHash && (
+              <input
+                type="password"
+                value={currentPwd}
+                onChange={(e) => setCurrentPwd(e.target.value)}
+                placeholder="Current password"
+                autoComplete="current-password"
+                className="px-3 py-2 bg-[#FAF9F5] border-2 border-[#141413] rounded text-sm font-mono"
+              />
+            )}
+            <input
+              type="password"
+              value={newPwd}
+              onChange={(e) => setNewPwd(e.target.value)}
+              placeholder="New password (min 8 chars)"
+              autoComplete="new-password"
+              className="px-3 py-2 bg-[#FAF9F5] border-2 border-[#141413] rounded text-sm font-mono"
+            />
+            <input
+              type="password"
+              value={confirmPwd}
+              onChange={(e) => setConfirmPwd(e.target.value)}
+              placeholder="Confirm new password"
+              autoComplete="new-password"
+              className="px-3 py-2 bg-[#FAF9F5] border-2 border-[#141413] rounded text-sm font-mono"
+            />
+          </div>
+          {pwdError && (
+            <p className="text-xs font-bold text-red-700">{pwdError}</p>
+          )}
+          <button
+            type="submit"
+            disabled={savingPwd}
+            className="brutal-btn px-4 py-2 bg-[#D97757] text-[#141413] font-bold text-xs inline-flex items-center gap-2 cursor-pointer disabled:opacity-60"
+          >
+            <ShieldCheck className="w-4 h-4" />
+            <span>{savingPwd ? 'Hashing...' : 'Save New Password'}</span>
+          </button>
+        </form>
+
+        <div className="p-3.5 bg-[#FAF9F5] border border-[#E8E6DC] rounded-lg text-xs text-[#5C5A54] space-y-1.5">
+          <div className="flex items-center gap-1.5 font-bold text-[#141413]">
+            <AlertTriangle className="w-4 h-4 text-[#C96442]" />
+            <span>Static SPA Security Note (GitHub Pages)</span>
+          </div>
+          <p className="leading-relaxed">
+            Passwords are salted and hashed with PBKDF2-SHA256 (150,000 iterations)
+            with a 5-attempt cooldown and 30-minute idle timeout. Because this site
+            is a client-side static app without a backend database, edits only affect
+            your browser&apos;s local storage. If you later connect a shared backend API,
+            enforce authentication on the server or behind Cloudflare Access.
+          </p>
         </div>
       </div>
 

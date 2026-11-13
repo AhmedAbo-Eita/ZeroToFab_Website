@@ -21,6 +21,7 @@ import {
   getGoogleDriveDirectDownloadUrl,
   getGoogleDrivePreviewUrl,
 } from '../utils/googleDrive';
+import { sanitizeExternalUrl } from '../utils/security';
 
 interface CoursePlayerModalProps {
   course: CourseModule | null;
@@ -33,14 +34,18 @@ interface CoursePlayerModalProps {
 function toYoutubeEmbed(url: string): string | null {
   try {
     const u = new URL(url);
-    if (u.hostname.includes('youtu.be')) {
-      const id = u.pathname.replace('/', '');
-      return id ? `https://www.youtube.com/embed/${id}` : null;
+    if (u.protocol !== 'https:' && u.protocol !== 'http:') return null;
+    if (u.hostname === 'youtu.be' || u.hostname.endsWith('.youtu.be')) {
+      const id = u.pathname.replace(/^\/+/, '').split('/')[0];
+      return id ? `https://www.youtube.com/embed/${encodeURIComponent(id)}` : null;
     }
-    if (u.hostname.includes('youtube.com')) {
-      if (u.pathname.startsWith('/embed/')) return url;
+    if (u.hostname === 'youtube.com' || u.hostname.endsWith('.youtube.com')) {
+      if (u.pathname.startsWith('/embed/')) {
+        const id = u.pathname.replace('/embed/', '').split('/')[0];
+        return id ? `https://www.youtube.com/embed/${encodeURIComponent(id)}` : null;
+      }
       const id = u.searchParams.get('v');
-      return id ? `https://www.youtube.com/embed/${id}` : null;
+      return id ? `https://www.youtube.com/embed/${encodeURIComponent(id)}` : null;
     }
   } catch {
     return null;
@@ -95,7 +100,8 @@ export const CoursePlayerModal: React.FC<CoursePlayerModalProps> = ({
           setResolvedVideoUrl(url);
         }
       } else if (activeLesson.videoUrl) {
-        setResolvedVideoUrl(activeLesson.videoUrl);
+        const safeVideoUrl = sanitizeExternalUrl(activeLesson.videoUrl);
+        setResolvedVideoUrl(safeVideoUrl);
       }
     }
 
@@ -140,7 +146,10 @@ export const CoursePlayerModal: React.FC<CoursePlayerModalProps> = ({
       }
     }
     if (att.url) {
-      window.open(att.url, '_blank', 'noopener,noreferrer');
+      const safeUrl = sanitizeExternalUrl(att.url);
+      if (safeUrl) {
+        window.open(safeUrl, '_blank', 'noopener,noreferrer');
+      }
       return;
     }
     const blob = new Blob(
@@ -180,10 +189,11 @@ export const CoursePlayerModal: React.FC<CoursePlayerModalProps> = ({
   const requireClickToRequest =
     activeLesson?.driveRequestOnDemand ?? driveConfig.defaultOnDemand;
 
+  const safeProxyBase = sanitizeExternalUrl(driveConfig.proxyBaseUrl);
   const driveSrc =
     isDriveLesson && activeLesson?.driveFileId
-      ? driveConfig.proxyBaseUrl?.trim()
-        ? `${driveConfig.proxyBaseUrl.replace(/\/$/, '')}?fileId=${encodeURIComponent(
+      ? safeProxyBase
+        ? `${safeProxyBase.replace(/\/$/, '')}?fileId=${encodeURIComponent(
             activeLesson.driveFileId
           )}`
         : getGoogleDrivePreviewUrl(activeLesson.driveFileId)
@@ -252,7 +262,7 @@ export const CoursePlayerModal: React.FC<CoursePlayerModalProps> = ({
                               </span>
                             </div>
                           )}
-                          {driveConfig.proxyBaseUrl?.trim() ? (
+                          {safeProxyBase ? (
                             <video
                               src={driveSrc}
                               controls

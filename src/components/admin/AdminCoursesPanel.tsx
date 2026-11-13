@@ -25,6 +25,7 @@ import {
   requestGoogleDriveToken,
   uploadVideoToGoogleDrive,
 } from '../../utils/googleDrive';
+import { sanitizeExternalUrl } from '../../utils/security';
 
 interface AdminCoursesPanelProps {
   courses: CourseModule[];
@@ -69,6 +70,9 @@ export const AdminCoursesPanel: React.FC<AdminCoursesPanelProps> = ({
   const [driveUrlInput, setDriveUrlInput] = useState('');
   const [driveOnDemand, setDriveOnDemand] = useState(
     driveConfig.defaultOnDemand
+  );
+  const [driveMakePublic, setDriveMakePublic] = useState(
+    !driveConfig.proxyBaseUrl.trim()
   );
   const [externalUrl, setExternalUrl] = useState('');
   const [videoFile, setVideoFile] = useState<File | null>(null);
@@ -205,7 +209,7 @@ export const AdminCoursesPanel: React.FC<AdminCoursesPanelProps> = ({
           file: videoFile,
           accessToken: token,
           folderId: driveConfig.folderId,
-          makePublicLink: true,
+          makePublicLink: driveMakePublic,
           onProgress: (pct) => setUploadPct(pct),
         });
         videoType = 'gdrive';
@@ -219,12 +223,20 @@ export const AdminCoursesPanel: React.FC<AdminCoursesPanelProps> = ({
         videoMediaKey = `vid-${lessonId}`;
         await saveMediaBlob(videoMediaKey, videoFile);
         videoType = 'uploaded';
-      } else if (videoSource === 'youtube') {
-        videoType = 'youtube';
-        videoUrl = externalUrl.trim();
-      } else if (videoSource === 'mp4') {
-        videoType = 'mp4';
-        videoUrl = externalUrl.trim();
+      } else if (videoSource === 'youtube' || videoSource === 'mp4') {
+        // Reject non-http(s) protocols (e.g. javascript:, data:) before saving lesson links
+        const safeUrl = sanitizeExternalUrl(externalUrl);
+        if (!safeUrl) {
+          onNotify(
+            videoSource === 'youtube'
+              ? 'Please enter a valid http(s) YouTube URL.'
+              : 'Please enter a valid http(s) MP4 URL.'
+          );
+          setUploading(false);
+          return;
+        }
+        videoType = videoSource;
+        videoUrl = safeUrl;
       }
 
       const attachments: ResourceAttachment[] = [];
@@ -927,6 +939,17 @@ export const AdminCoursesPanel: React.FC<AdminCoursesPanelProps> = ({
                           setVideoFile(e.target.files?.[0] || null)
                         }
                       />
+                    </label>
+                    <label className="inline-flex items-center gap-2 text-xs font-bold cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={driveMakePublic}
+                        onChange={(e) => setDriveMakePublic(e.target.checked)}
+                        className="w-4 h-4 accent-[#D97757]"
+                      />
+                      <span>
+                        Make uploaded video link public (&quot;Anyone with the link can view&quot; — uncheck if using a private proxy)
+                      </span>
                     </label>
                     <label className="inline-flex items-center gap-2 text-xs font-bold cursor-pointer">
                       <input
