@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowRight, Clock, Layers, Star } from 'lucide-react';
-import { CourseLevel, CourseModule } from '../types/course';
+import { ArrowRight, Clock, Layers, Lock, Star, Unlock } from 'lucide-react';
+import { CourseLevel, CourseModule, StudentUser } from '../types/course';
 import { EyebrowBrick } from './BrandMark';
 import { CourseThumbnailSvg } from './PcbArtwork';
+import { hasCourseAccess } from '../utils/userAuth';
 
 interface CurriculumSectionProps {
   eyebrow: string;
@@ -13,10 +14,12 @@ interface CurriculumSectionProps {
   countdownEndIso: string;
   courses: CourseModule[];
   completedLessonIds: string[];
+  currentUser: StudentUser | null;
   onSelectCourse: (course: CourseModule) => void;
+  onOpenAuthModal: () => void;
 }
 
-type FilterOption = 'All' | CourseLevel | 'Free';
+type FilterOption = 'All' | CourseLevel | 'Free' | 'Unlocked';
 
 function computeSecondsLeft(iso: string): number {
   const target = new Date(iso).getTime();
@@ -33,12 +36,20 @@ export const CurriculumSection: React.FC<CurriculumSectionProps> = ({
   countdownEndIso,
   courses,
   completedLessonIds,
+  currentUser,
   onSelectCourse,
+  onOpenAuthModal,
 }) => {
   const [filter, setFilter] = useState<FilterOption>('All');
   const [secondsLeft, setSecondsLeft] = useState(() =>
     computeSecondsLeft(countdownEndIso)
   );
+
+  useEffect(() => {
+    if (!currentUser && filter === 'Unlocked') {
+      setFilter('All');
+    }
+  }, [currentUser, filter]);
 
   useEffect(() => {
     setSecondsLeft(computeSecondsLeft(countdownEndIso));
@@ -57,8 +68,13 @@ export const CurriculumSection: React.FC<CurriculumSectionProps> = ({
   const filtered = courses.filter((c) => {
     if (filter === 'All') return true;
     if (filter === 'Free') return c.price === 0;
+    if (filter === 'Unlocked') return hasCourseAccess(currentUser, c);
     return c.level === filter;
   });
+
+  const filterTabs: FilterOption[] = currentUser
+    ? ['All', 'Beginner', 'Intermediate', 'Advanced', 'Free', 'Unlocked']
+    : ['All', 'Beginner', 'Intermediate', 'Advanced', 'Free'];
 
   return (
     <section
@@ -103,10 +119,10 @@ export const CurriculumSection: React.FC<CurriculumSectionProps> = ({
         )}
       </div>
 
-      {/* Level Filter Tabs (Public student view only — no upload buttons) */}
-      <div className="flex flex-wrap items-center gap-2 mb-8">
-        {(['All', 'Beginner', 'Intermediate', 'Advanced', 'Free'] as FilterOption[]).map(
-          (tab) => {
+      {/* Level Filter Tabs + Student Access Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-8">
+        <div className="flex flex-wrap items-center gap-2">
+          {filterTabs.map((tab) => {
             const active = filter === tab;
             return (
               <button
@@ -118,11 +134,33 @@ export const CurriculumSection: React.FC<CurriculumSectionProps> = ({
                     : 'bg-[#FAF9F5] text-[#141413] hover:bg-[#F0EEE6]'
                 }`}
               >
-                {tab === 'All' ? 'All Tracks' : tab}
+                {tab === 'All'
+                  ? 'All Tracks'
+                  : tab === 'Unlocked'
+                  ? 'Unlocked For Me'
+                  : tab}
               </button>
             );
-          }
-        )}
+          })}
+        </div>
+
+        <button
+          type="button"
+          onClick={onOpenAuthModal}
+          className="px-3.5 py-2 text-xs font-mono font-bold bg-[#FFFFFF] hover:bg-[#F0EEE6] border-2 border-[#141413] rounded-md inline-flex items-center gap-1.5 cursor-pointer"
+        >
+          {currentUser ? (
+            <>
+              <Unlock className="w-3.5 h-3.5 text-[#C96442]" />
+              <span>Signed in: {currentUser.name}</span>
+            </>
+          ) : (
+            <>
+              <Lock className="w-3.5 h-3.5 text-[#C96442]" />
+              <span>Sign in to view unlocked courses</span>
+            </>
+          )}
+        </button>
       </div>
 
       {/* Course Cards Grid */}
@@ -130,6 +168,10 @@ export const CurriculumSection: React.FC<CurriculumSectionProps> = ({
         {filtered.map((course, idx) => {
           const completedInMod = course.lessons.filter((l) =>
             completedLessonIds.includes(l.id)
+          ).length;
+          const courseUnlocked = hasCourseAccess(currentUser, course);
+          const previewCount = course.lessons.filter(
+            (l) => l.isFreePreview
           ).length;
 
           return (
@@ -210,7 +252,7 @@ export const CurriculumSection: React.FC<CurriculumSectionProps> = ({
               </div>
 
               <div className="px-5 sm:px-6 pb-5 sm:pb-6">
-                <div className="flex items-baseline justify-between mb-3">
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
                   {course.price === 0 ? (
                     <div className="flex items-center gap-2">
                       <span className="text-2xl font-bold text-[#141413]">
@@ -221,7 +263,7 @@ export const CurriculumSection: React.FC<CurriculumSectionProps> = ({
                       </span>
                     </div>
                   ) : (
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span className="text-2xl font-bold text-[#141413]">
                         ${course.price}
                       </span>
@@ -237,6 +279,23 @@ export const CurriculumSection: React.FC<CurriculumSectionProps> = ({
                       )}
                     </div>
                   )}
+
+                  {course.price > 0 &&
+                    (courseUnlocked ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-mono font-bold bg-[#D97757] text-[#141413] border border-[#141413] rounded">
+                        <Unlock className="w-3 h-3" />
+                        <span>UNLOCKED FOR YOU</span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-mono font-bold bg-[#F0EEE6] text-[#5C5A54] border border-[#141413] rounded">
+                        <Lock className="w-3 h-3" />
+                        <span>
+                          {previewCount > 0
+                            ? `${previewCount} FREE PREVIEW · LOCKED`
+                            : 'LOCKED'}
+                        </span>
+                      </span>
+                    ))}
                 </div>
 
                 <button
@@ -244,11 +303,17 @@ export const CurriculumSection: React.FC<CurriculumSectionProps> = ({
                   className={`brutal-btn w-full py-3 px-4 font-bold text-sm flex items-center justify-center gap-2 cursor-pointer ${
                     course.price === 0
                       ? 'bg-[#C96442] text-[#FAF9F5] hover:bg-[#D97757] hover:text-[#141413]'
+                      : courseUnlocked
+                      ? 'bg-[#141413] text-[#FAF9F5] hover:bg-[#D97757] hover:text-[#141413]'
                       : 'bg-[#D97757] text-[#141413]'
                   }`}
                 >
                   <span>
-                    {course.price === 0 ? 'Watch Free Module' : 'Open Module'}
+                    {courseUnlocked
+                      ? course.price === 0
+                        ? 'Watch Free Module'
+                        : 'Open Unlocked Module'
+                      : 'Preview / Unlock Module'}
                   </span>
                   <ArrowRight className="w-4 h-4" />
                 </button>

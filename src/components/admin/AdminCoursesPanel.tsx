@@ -77,6 +77,7 @@ export const AdminCoursesPanel: React.FC<AdminCoursesPanelProps> = ({
   const [externalUrl, setExternalUrl] = useState('');
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [attachmentFiles, setAttachmentFiles] = useState<File[]>([]);
+  const [lesFreePreview, setLesFreePreview] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadPct, setUploadPct] = useState(0);
 
@@ -276,7 +277,7 @@ export const AdminCoursesPanel: React.FC<AdminCoursesPanelProps> = ({
         videoMediaKey,
         videoUrl,
         attachments,
-        isFreePreview: true,
+        isFreePreview: lesFreePreview,
       };
 
       onUpdateCourses(
@@ -294,6 +295,7 @@ export const AdminCoursesPanel: React.FC<AdminCoursesPanelProps> = ({
       setExternalUrl('');
       setVideoFile(null);
       setAttachmentFiles([]);
+      setLesFreePreview(false);
       onNotify(
         videoType === 'gdrive'
           ? 'Google Drive video lesson published (on-demand streaming enabled)!'
@@ -316,6 +318,23 @@ export const AdminCoursesPanel: React.FC<AdminCoursesPanelProps> = ({
       )
     );
     onNotify('Lesson deleted.');
+  };
+
+  const handleToggleLessonPreview = (courseId: string, lessonId: string) => {
+    onUpdateCourses(
+      courses.map((c) =>
+        c.id === courseId
+          ? {
+              ...c,
+              lessons: c.lessons.map((l) =>
+                l.id === lessonId
+                  ? { ...l, isFreePreview: !l.isFreePreview }
+                  : l
+              ),
+            }
+          : c
+      )
+    );
   };
 
   return (
@@ -807,6 +826,20 @@ export const AdminCoursesPanel: React.FC<AdminCoursesPanelProps> = ({
                             ? `G-DRIVE (${l.driveRequestOnDemand ? 'ON-DEMAND' : 'AUTO'})`
                             : l.videoType.toUpperCase()}
                         </span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleToggleLessonPreview(selectedCourse.id, l.id)
+                          }
+                          title="Toggle Free Preview access for this lesson"
+                          className={`px-1.5 py-0.5 border border-[#141413] rounded text-[10px] font-bold cursor-pointer transition-colors ${
+                            l.isFreePreview
+                              ? 'bg-[#D97757] text-[#141413]'
+                              : 'bg-[#FFFFFF] text-[#5C5A54] hover:bg-[#F0EEE6]'
+                          }`}
+                        >
+                          {l.isFreePreview ? 'FREE PREVIEW' : 'LOCKED (PRO)'}
+                        </button>
                       </div>
                     </div>
                     <button
@@ -1036,6 +1069,18 @@ export const AdminCoursesPanel: React.FC<AdminCoursesPanelProps> = ({
                   className="block w-full text-xs file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-2 file:border-[#141413] file:font-bold file:bg-[#F0EEE6] cursor-pointer"
                 />
               </div>
+
+              <label className="inline-flex items-center gap-2 text-xs font-bold cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={lesFreePreview}
+                  onChange={(e) => setLesFreePreview(e.target.checked)}
+                  className="w-4 h-4 accent-[#D97757]"
+                />
+                <span>
+                  Free Preview lesson (allow all visitors to watch before unlocking course)
+                </span>
+              </label>
 
               <button
                 type="submit"

@@ -5,6 +5,7 @@ import {
   LabVideoItem,
   MasterclassItem,
   SiteSectionsConfig,
+  StudentUser,
   TestimonialItem,
 } from '../types/course';
 
@@ -604,6 +605,20 @@ export const DEFAULT_SECTIONS: SiteSectionsConfig = {
   footerTagline: '50Ω / 90Ω / 100Ω · ZERO TO PRODUCTION',
 };
 
+export const DEFAULT_USERS: StudentUser[] = [
+  {
+    id: 'user-demo-student',
+    email: 'engineer@example.com',
+    name: 'Demo Hardware Student',
+    unlockedCourseIds: ['mod-02-4layer-mcu'],
+    unlockAllCourses: false,
+    status: 'active',
+    createdAt: '2026-01-15T10:00:00.000Z',
+    notes:
+      'Sample pre-authorized student with Module 02 unlocked (claim via Create Account or set password in Admin).',
+  },
+];
+
 export const DEFAULT_SITE_STATE: FullSiteState = {
   profile: DEFAULT_INSTRUCTOR,
   sections: DEFAULT_SECTIONS,
@@ -621,4 +636,5 @@ export const DEFAULT_SITE_STATE: FullSiteState = {
     passcodeEnabled: true,
     passcodeHash: '',
   },
+  users: DEFAULT_USERS,
 };

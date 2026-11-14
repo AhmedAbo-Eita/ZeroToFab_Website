@@ -7,7 +7,11 @@ import {
   FileText,
   HardDrive,
   Loader2,
+  Lock,
+  LogIn,
   Play,
+  Unlock,
+  UserCheck,
   X,
 } from 'lucide-react';
 import {
@@ -15,6 +19,7 @@ import {
   GoogleDriveConfig,
   Lesson,
   ResourceAttachment,
+  StudentUser,
 } from '../types/course';
 import { getMediaBlobUrl } from '../utils/mediaStorage';
 import {
@@ -22,12 +27,15 @@ import {
   getGoogleDrivePreviewUrl,
 } from '../utils/googleDrive';
 import { sanitizeExternalUrl } from '../utils/security';
+import { hasCourseAccess, hasLessonAccess } from '../utils/userAuth';
 
 interface CoursePlayerModalProps {
   course: CourseModule | null;
   driveConfig: GoogleDriveConfig;
+  currentUser: StudentUser | null;
   completedLessonIds: string[];
   onToggleComplete: (lessonId: string) => void;
+  onOpenAuthModal: () => void;
   onClose: () => void;
 }
 
@@ -56,8 +64,10 @@ function toYoutubeEmbed(url: string): string | null {
 export const CoursePlayerModal: React.FC<CoursePlayerModalProps> = ({
   course,
   driveConfig,
+  currentUser,
   completedLessonIds,
   onToggleComplete,
+  onOpenAuthModal,
   onClose,
 }) => {
   const [activeLessonId, setActiveLessonId] = useState<string>('');
@@ -68,7 +78,10 @@ export const CoursePlayerModal: React.FC<CoursePlayerModalProps> = ({
 
   useEffect(() => {
     if (course && course.lessons.length > 0) {
-      setActiveLessonId(course.lessons[0].id);
+      const firstAccessible =
+        course.lessons.find((l) => hasLessonAccess(currentUser, course, l)) ||
+        course.lessons[0];
+      setActiveLessonId(firstAccessible.id);
     }
   }, [course?.id]);
 
@@ -78,6 +91,13 @@ export const CoursePlayerModal: React.FC<CoursePlayerModalProps> = ({
       course.lessons.find((l) => l.id === activeLessonId) || course.lessons[0]
     );
   }, [course, activeLessonId]);
+
+  const courseUnlocked = course ? hasCourseAccess(currentUser, course) : false;
+  const lessonUnlocked =
+    course && activeLesson
+      ? hasLessonAccess(currentUser, course, activeLesson)
+      : false;
+  const firstFreePreviewLesson = course?.lessons.find((l) => l.isFreePreview);
 
   // Reset on-demand Google Drive stream state when switching lessons
   useEffect(() => {
@@ -91,7 +111,7 @@ export const CoursePlayerModal: React.FC<CoursePlayerModalProps> = ({
 
     async function loadVideo() {
       setResolvedVideoUrl(null);
-      if (!activeLesson) return;
+      if (!activeLesson || !lessonUnlocked) return;
 
       if (activeLesson.videoType === 'uploaded' && activeLesson.videoMediaKey) {
         const url = await getMediaBlobUrl(activeLesson.videoMediaKey);
@@ -110,7 +130,12 @@ export const CoursePlayerModal: React.FC<CoursePlayerModalProps> = ({
       cancelled = true;
       if (revokedUrl) URL.revokeObjectURL(revokedUrl);
     };
-  }, [activeLesson?.id, activeLesson?.videoMediaKey, activeLesson?.videoUrl]);
+  }, [
+    activeLesson?.id,
+    activeLesson?.videoMediaKey,
+    activeLesson?.videoUrl,
+    lessonUnlocked,
+  ]);
 
   useEffect(() => {
     const onEsc = (e: KeyboardEvent) => {
@@ -222,10 +247,31 @@ export const CoursePlayerModal: React.FC<CoursePlayerModalProps> = ({
           {/* Top Bar */}
           <div className="px-5 py-4 bg-[#141413] text-[#FAF9F5] flex items-center justify-between gap-4 border-b-2 border-[#141413]">
             <div className="min-w-0">
-              <div className="flex items-center gap-2 mb-0.5">
+              <div className="flex flex-wrap items-center gap-2 mb-0.5">
                 <span className="px-2 py-0.5 bg-[#D97757] text-[#141413] font-mono text-[11px] font-bold rounded">
                   MOD [{course.number}] · {course.level.toUpperCase()}
                 </span>
+                {course.price > 0 && (
+                  <span
+                    className={`inline-flex items-center gap-1 px-2 py-0.5 font-mono text-[10px] font-bold rounded border ${
+                      courseUnlocked
+                        ? 'bg-[#2A2926] text-[#D97757] border-[#D97757]'
+                        : 'bg-[#2A2926] text-[#FAF9F5] border-[#FAF9F5]/30'
+                    }`}
+                  >
+                    {courseUnlocked ? (
+                      <>
+                        <Unlock className="w-3 h-3" />
+                        <span>UNLOCKED</span>
+                      </>
+                    ) : (
+                      <>
+                        <Lock className="w-3 h-3" />
+                        <span>PREVIEW MODE</span>
+                      </>
+                    )}
+                  </span>
+                )}
                 <span className="font-mono text-xs text-[#B0AEA5]">
                   {progressPct}% Completed
                 </span>
@@ -248,6 +294,93 @@ export const CoursePlayerModal: React.FC<CoursePlayerModalProps> = ({
           <div className="flex-1 overflow-y-auto grid grid-cols-1 lg:grid-cols-12">
             <div className="lg:col-span-8 p-5 sm:p-6 border-b-2 lg:border-b-0 lg:border-r-2 border-[#E8E6DC]">
               {activeLesson ? (
+                !lessonUnlocked ? (
+                  /* Neo-Brutalist Locked Lesson Gate */
+                  <div className="bg-[#141413] text-[#FAF9F5] border-2 border-[#141413] rounded-xl p-6 sm:p-10 shadow-[6px_6px_0px_#D97757] pcb-grid-bg flex flex-col items-center text-center justify-center min-h-[380px]">
+                    <div className="w-16 h-16 rounded-2xl bg-[#D97757] text-[#141413] border-2 border-[#FAF9F5] flex items-center justify-center mb-5 shadow-[4px_4px_0px_#FAF9F5]">
+                      <Lock className="w-8 h-8" />
+                    </div>
+
+                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded bg-[#1C1C1A] border border-[#D97757]/60 font-mono text-[11px] font-bold text-[#D97757] mb-3">
+                      <span>
+                        MOD [{course.number}] · ${course.price} PRO LESSON
+                      </span>
+                    </div>
+
+                    <h4 className="font-bold text-xl sm:text-2xl max-w-lg mb-2">
+                      {currentUser
+                        ? `Locked for ${currentUser.email}`
+                        : 'Sign in to access this lesson'}
+                    </h4>
+
+                    <p className="font-mono text-xs text-[#D97757] mb-3">
+                      {activeLesson.title} ({activeLesson.duration})
+                    </p>
+
+                    <p className="text-xs sm:text-sm text-[#B0AEA5] max-w-md mb-6 leading-relaxed">
+                      {currentUser ? (
+                        <>
+                          Your account does not currently have full access to{' '}
+                          <strong className="text-[#FAF9F5]">
+                            {course.title}
+                          </strong>
+                          . Ask the site administrator to unlock this module for{' '}
+                          <strong className="text-[#FAF9F5]">
+                            {currentUser.email}
+                          </strong>{' '}
+                          in the Admin Dashboard.
+                        </>
+                      ) : (
+                        <>
+                          Students with access to{' '}
+                          <strong className="text-[#FAF9F5]">
+                            {course.title}
+                          </strong>{' '}
+                          can sign in to watch all lessons, read engineering
+                          notes, and download project files.
+                        </>
+                      )}
+                    </p>
+
+                    <div className="flex flex-wrap items-center justify-center gap-3">
+                      <button
+                        type="button"
+                        onClick={onOpenAuthModal}
+                        className="inline-flex items-center gap-2 px-5 py-3 bg-[#D97757] hover:bg-[#E87A54] text-[#141413] font-bold text-sm rounded border-2 border-[#FAF9F5] shadow-[4px_4px_0px_#FAF9F5] transition-all cursor-pointer"
+                      >
+                        {currentUser ? (
+                          <>
+                            <UserCheck className="w-4 h-4" />
+                            <span>View My Account / Switch User</span>
+                          </>
+                        ) : (
+                          <>
+                            <LogIn className="w-4 h-4" />
+                            <span>Sign In / Create Account</span>
+                          </>
+                        )}
+                      </button>
+
+                      {firstFreePreviewLesson &&
+                        firstFreePreviewLesson.id !== activeLesson.id && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setActiveLessonId(firstFreePreviewLesson.id)
+                            }
+                            className="inline-flex items-center gap-2 px-4 py-3 bg-[#1C1C1A] hover:bg-[#2A2926] text-[#FAF9F5] font-bold text-xs rounded border border-[#FAF9F5]/40 transition-colors cursor-pointer"
+                          >
+                            <Play className="w-3.5 h-3.5 text-[#D97757]" />
+                            <span>
+                              {currentUser
+                                ? 'Jump to Free Preview Lesson'
+                                : 'Watch Free Preview Lesson'}
+                            </span>
+                          </button>
+                        )}
+                    </div>
+                  </div>
+                ) : (
                 <>
                   {/* Video Player Viewport */}
                   <div className="relative aspect-video w-full bg-[#141413] rounded-xl border-2 border-[#141413] overflow-hidden mb-5 shadow-[4px_4px_0px_#141413]">
@@ -429,6 +562,7 @@ export const CoursePlayerModal: React.FC<CoursePlayerModalProps> = ({
                     </div>
                   )}
                 </>
+                )
               ) : (
                 <div className="py-12 text-center text-[#5C5A54]">
                   No lessons available in this module yet.
@@ -458,6 +592,8 @@ export const CoursePlayerModal: React.FC<CoursePlayerModalProps> = ({
                 {course.lessons.map((les, idx) => {
                   const isActive = les.id === activeLesson?.id;
                   const isDone = completedLessonIds.includes(les.id);
+                  const isLesUnlocked = hasLessonAccess(currentUser, course, les);
+
                   return (
                     <button
                       key={les.id}
@@ -465,12 +601,16 @@ export const CoursePlayerModal: React.FC<CoursePlayerModalProps> = ({
                       className={`w-full text-left p-3.5 rounded-lg border-2 transition-all cursor-pointer ${
                         isActive
                           ? 'bg-[#D97757] border-[#141413] shadow-[3px_3px_0px_#141413]'
-                          : 'bg-[#FAF9F5] border-[#141413] hover:bg-[#FFFFFF]'
+                          : isLesUnlocked
+                          ? 'bg-[#FAF9F5] border-[#141413] hover:bg-[#FFFFFF]'
+                          : 'bg-[#FAF9F5]/75 border-[#141413]/70 hover:bg-[#FFFFFF]'
                       }`}
                     >
                       <div className="flex items-start gap-2.5">
                         <span className="mt-0.5 shrink-0">
-                          {isDone ? (
+                          {!isLesUnlocked ? (
+                            <Lock className="w-4 h-4 text-[#141413]" />
+                          ) : isDone ? (
                             <CheckCircle2 className="w-4 h-4 text-[#141413]" />
                           ) : (
                             <span className="inline-flex items-center justify-center w-4 h-4 rounded-full border border-[#141413] font-mono text-[10px] font-bold">
@@ -482,8 +622,20 @@ export const CoursePlayerModal: React.FC<CoursePlayerModalProps> = ({
                           <div className="font-bold text-sm text-[#141413] leading-snug">
                             {les.title}
                           </div>
-                          <div className="flex items-center gap-2 mt-1 font-mono text-[11px] text-[#141413]/75">
+                          <div className="flex flex-wrap items-center gap-1.5 mt-1 font-mono text-[11px] text-[#141413]/75">
                             <span>{les.duration}</span>
+                            {!isLesUnlocked && (
+                              <span className="px-1.5 py-0.2 bg-[#141413] text-[#FAF9F5] rounded text-[10px] font-bold">
+                                LOCKED
+                              </span>
+                            )}
+                            {course.price > 0 &&
+                              !courseUnlocked &&
+                              les.isFreePreview && (
+                                <span className="px-1.5 py-0.2 bg-[#FAF9F5] border border-[#141413] text-[#141413] rounded text-[10px] font-bold">
+                                  FREE PREVIEW
+                                </span>
+                              )}
                             {les.videoType === 'gdrive' && (
                               <span className="px-1.5 py-0.2 bg-[#141413] text-[#E5984B] rounded text-[10px]">
                                 G-DRIVE

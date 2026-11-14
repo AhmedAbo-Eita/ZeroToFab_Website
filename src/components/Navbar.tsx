@@ -1,13 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { BookOpen, X } from 'lucide-react';
+import { BookOpen, LogIn, LogOut, User, X } from 'lucide-react';
 import { BrandMark } from './BrandMark';
 import { sanitizeImageSrc } from '../utils/security';
+import { CourseModule, StudentUser } from '../types/course';
+import { hasCourseAccess } from '../utils/userAuth';
 
 interface NavbarProps {
   brandName: string;
   siteIconUrl?: string;
+  currentUser: StudentUser | null;
+  courses: CourseModule[];
   onOpenFirstCourse: () => void;
+  onOpenAuthModal: () => void;
+  onLogout: () => void;
 }
 
 const NAV_LINKS = [
@@ -21,9 +27,23 @@ const NAV_LINKS = [
 export const Navbar: React.FC<NavbarProps> = ({
   brandName,
   siteIconUrl,
+  currentUser,
+  courses,
   onOpenFirstCourse,
+  onOpenAuthModal,
+  onLogout,
 }) => {
   const [menuOpen, setMenuOpen] = useState(false);
+
+  const unlockedPaidCount = currentUser
+    ? courses.filter((c) => c.price > 0 && hasCourseAccess(currentUser, c)).length
+    : 0;
+  const safeAvatarUrl = currentUser
+    ? sanitizeImageSrc(currentUser.avatarUrl)
+    : undefined;
+  const initials = currentUser
+    ? (currentUser.name.trim() || currentUser.email).slice(0, 2).toUpperCase()
+    : '';
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -58,22 +78,73 @@ export const Navbar: React.FC<NavbarProps> = ({
           </span>
         </a>
 
-        {/* Right: Signature 2-line Hamburger */}
-        <button
-          onClick={() => setMenuOpen((prev) => !prev)}
-          aria-label={menuOpen ? 'Close menu' : 'Open menu'}
-          aria-expanded={menuOpen}
-          className="p-2.5 rounded-md hover:bg-[#F0EEE6] transition-colors cursor-pointer"
-        >
-          {menuOpen ? (
-            <X className="w-6 h-6 text-[#141413]" strokeWidth={2.5} />
-          ) : (
-            <div className="w-6 flex flex-col gap-1.5">
-              <span className="block h-[2.5px] w-full bg-[#141413]" />
-              <span className="block h-[2.5px] w-full bg-[#141413]" />
+        {/* Right: Student Auth Control + Signature 2-line Hamburger */}
+        <div className="flex items-center gap-2.5 sm:gap-3">
+          {currentUser ? (
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <button
+                type="button"
+                onClick={onOpenAuthModal}
+                className="inline-flex items-center gap-2 px-2.5 sm:px-3 py-1.5 bg-[#FFFFFF] hover:bg-[#F0EEE6] border-2 border-[#141413] rounded-lg shadow-[2px_2px_0px_#141413] transition-colors cursor-pointer"
+              >
+                {safeAvatarUrl ? (
+                  <img
+                    src={safeAvatarUrl}
+                    alt={currentUser.name}
+                    className="w-6 h-6 rounded-full border border-[#141413] object-cover shrink-0"
+                  />
+                ) : (
+                  <span className="w-6 h-6 rounded-full bg-[#D97757] border border-[#141413] flex items-center justify-center font-mono text-[10px] font-bold text-[#141413] shrink-0">
+                    {initials}
+                  </span>
+                )}
+                <span className="font-bold text-xs text-[#141413] max-w-[100px] sm:max-w-[140px] truncate hidden sm:inline">
+                  {currentUser.name}
+                </span>
+                <span className="px-1.5 py-0.5 bg-[#141413] text-[#D97757] font-mono text-[10px] font-bold rounded hidden md:inline">
+                  {currentUser.unlockAllCourses
+                    ? 'ALL ACCESS'
+                    : `${unlockedPaidCount} UNLOCKED`}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={onLogout}
+                title="Sign Out"
+                aria-label="Sign Out"
+                className="p-2 bg-[#FAF9F5] hover:bg-[#F0EEE6] border-2 border-[#141413] rounded-lg transition-colors cursor-pointer"
+              >
+                <LogOut className="w-4 h-4 text-[#141413]" />
+              </button>
             </div>
+          ) : (
+            <button
+              type="button"
+              onClick={onOpenAuthModal}
+              className="brutal-btn inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-[#D97757] text-[#141413] font-bold text-xs sm:text-sm rounded-md cursor-pointer"
+            >
+              <LogIn className="w-4 h-4" />
+              <span>Sign In</span>
+            </button>
           )}
-        </button>
+
+          <button
+            onClick={() => setMenuOpen((prev) => !prev)}
+            aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+            aria-expanded={menuOpen}
+            className="p-2.5 rounded-md hover:bg-[#F0EEE6] transition-colors cursor-pointer"
+          >
+            {menuOpen ? (
+              <X className="w-6 h-6 text-[#141413]" strokeWidth={2.5} />
+            ) : (
+              <div className="w-6 flex flex-col gap-1.5">
+                <span className="block h-[2.5px] w-full bg-[#141413]" />
+                <span className="block h-[2.5px] w-full bg-[#141413]" />
+              </div>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Expandable Full-Width Neo-Brutalist Drawer (matching yehia.tech) */}
@@ -118,6 +189,45 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <BookOpen className="w-4 h-4" />
                   Start Free Module
                 </button>
+
+                {currentUser ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMenuOpen(false);
+                        onOpenAuthModal();
+                      }}
+                      className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#FFFFFF] border-2 border-[#141413] rounded-md font-bold text-sm cursor-pointer hover:bg-[#F0EEE6]"
+                    >
+                      <User className="w-4 h-4 text-[#C96442]" />
+                      <span>My Account ({currentUser.name})</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMenuOpen(false);
+                        onLogout();
+                      }}
+                      className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#FAF9F5] border-2 border-[#141413] rounded-md font-bold text-sm cursor-pointer hover:bg-[#F0EEE6]"
+                    >
+                      <LogOut className="w-4 h-4" />
+                      <span>Sign Out</span>
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      onOpenAuthModal();
+                    }}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#141413] text-[#FAF9F5] border-2 border-[#141413] rounded-md font-bold text-sm cursor-pointer hover:bg-[#2A2926]"
+                  >
+                    <LogIn className="w-4 h-4 text-[#D97757]" />
+                    <span>Sign In / Create Account</span>
+                  </button>
+                )}
               </div>
             </div>
           </motion.div>

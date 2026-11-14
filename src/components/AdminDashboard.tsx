@@ -14,17 +14,20 @@ import {
   Settings,
   ShieldCheck,
   Sparkles,
+  Users,
 } from 'lucide-react';
 import {
   CourseModule,
   FullSiteState,
   InstructorProfile,
   SiteSectionsConfig,
+  StudentUser,
 } from '../types/course';
 import { BrandMark } from './BrandMark';
 import { AdminCoursesPanel } from './admin/AdminCoursesPanel';
 import { AdminSectionsPanel } from './admin/AdminSectionsPanel';
 import { AdminExtrasPanel } from './admin/AdminExtrasPanel';
+import { AdminUsersPanel } from './admin/AdminUsersPanel';
 import {
   clearAdminSession,
   clearFailedUnlockAttempts,
@@ -48,6 +51,7 @@ interface AdminDashboardProps {
 
 type AdminTab =
   | 'courses'
+  | 'users'
   | 'sections'
   | 'masterclasses'
   | 'testimonials'
@@ -341,6 +345,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const NAV: { id: AdminTab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
     { id: 'courses', label: 'Courses, Pricing & Drive Upload', icon: BookOpen },
+    { id: 'users', label: 'Users & Content Access', icon: Users },
     { id: 'sections', label: 'All Page Sections & Hero', icon: Layers },
     { id: 'masterclasses', label: 'Masterclasses', icon: Sparkles },
     { id: 'testimonials', label: 'Testimonials', icon: MessageSquareQuote },
@@ -350,6 +355,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const handleUpdateCourses = (next: CourseModule[]) =>
     onUpdateState({ courses: next });
+  const handleUpdateUsers = (next: StudentUser[]) =>
+    onUpdateState({ users: next });
   const handleUpdateProfile = (next: InstructorProfile) =>
     onUpdateState({ profile: next });
   const handleUpdateSections = (next: SiteSectionsConfig) =>
@@ -455,6 +462,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               driveConfig={state.driveConfig}
               onUpdateCourses={handleUpdateCourses}
               onUpdateSections={handleUpdateSections}
+              onNotify={notify}
+            />
+          )}
+
+          {activeTab === 'users' && (
+            <AdminUsersPanel
+              users={state.users}
+              courses={state.courses}
+              onUpdateUsers={handleUpdateUsers}
               onNotify={notify}
             />
           )}

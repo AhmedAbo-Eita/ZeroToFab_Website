@@ -18,6 +18,7 @@ import {
   LabVideoItem,
   MasterclassItem,
   SiteSectionsConfig,
+  StudentUser,
   TestimonialItem,
 } from '../../types/course';
 import { extractGoogleDriveFileId } from '../../utils/googleDrive';
@@ -28,6 +29,7 @@ import {
   validatePasswordStrength,
   verifyAdminPassword,
 } from '../../utils/security';
+import { normalizeEmail } from '../../utils/userAuth';
 
 interface AdminExtrasPanelProps {
   mode: 'masterclasses' | 'testimonials' | 'lab' | 'settings';
@@ -646,11 +648,17 @@ export const AdminExtrasPanel: React.FC<AdminExtrasPanelProps> = ({
   };
 
   const handleExport = () => {
-    // Strip security credentials/hashes from exported site backups
-    const { security: _omittedSecurity, ...publicState } = state;
-    const blob = new Blob([JSON.stringify(publicState, null, 2)], {
-      type: 'application/json',
-    });
+    // Strip security credentials and user password hashes from exported site backups
+    const { security: _omittedSecurity, users, ...publicState } = state;
+    const sanitizedUsers = users.map(
+      ({ passwordHash: _omittedPwd, ...publicUser }) => publicUser
+    );
+    const blob = new Blob(
+      [JSON.stringify({ ...publicState, users: sanitizedUsers }, null, 2)],
+      {
+        type: 'application/json',
+      }
+    );
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -673,8 +681,34 @@ export const AdminExtrasPanel: React.FC<AdminExtrasPanelProps> = ({
         }
         const parsed = raw as Partial<FullSiteState>;
         // Never allow an imported JSON backup to overwrite or disable admin security
-        const { security: _ignored, ...safePatch } = parsed;
-        onUpdateState(safePatch);
+        const { security: _ignored, users: importedUsers, ...safePatch } = parsed;
+
+        if (Array.isArray(importedUsers)) {
+          const mergedUsers: StudentUser[] = importedUsers
+            .filter(
+              (u): u is StudentUser =>
+                Boolean(u && typeof u.email === 'string' && typeof u.id === 'string')
+            )
+            .map((imported) => {
+              const existing = state.users.find(
+                (cur) =>
+                  cur.id === imported.id ||
+                  normalizeEmail(cur.email) === normalizeEmail(imported.email)
+              );
+              return {
+                ...imported,
+                email: normalizeEmail(imported.email),
+                unlockedCourseIds: Array.isArray(imported.unlockedCourseIds)
+                  ? imported.unlockedCourseIds
+                  : [],
+                status: imported.status === 'suspended' ? 'suspended' : 'active',
+                passwordHash: existing?.passwordHash || imported.passwordHash,
+              };
+            });
+          onUpdateState({ ...safePatch, users: mergedUsers });
+        } else {
+          onUpdateState(safePatch);
+        }
         onNotify('Imported site configuration safely (security lock preserved)!');
       } catch {
         onNotify('Invalid JSON configuration file.');

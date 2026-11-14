@@ -209,6 +209,20 @@ export interface AdminSecurityConfig {
   passcodeHash: string;
 }
 
+export interface StudentUser {
+  id: string;
+  email: string; // normalized lowercase
+  name: string;
+  avatarUrl?: string;
+  passwordHash?: string; // PBKDF2-SHA256 hash
+  unlockedCourseIds: string[]; // IDs of CourseModules unlocked for this user
+  unlockAllCourses?: boolean; // Full all-access pass toggle
+  status: 'active' | 'suspended';
+  createdAt: string;
+  lastLoginAt?: string;
+  notes?: string;
+}
+
 export interface FullSiteState {
   profile: InstructorProfile;
   sections: SiteSectionsConfig;
@@ -218,4 +232,5 @@ export interface FullSiteState {
   labVideos: LabVideoItem[];
   driveConfig: GoogleDriveConfig;
   security: AdminSecurityConfig;
+  users: StudentUser[];
 }

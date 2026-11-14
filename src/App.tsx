@@ -1,6 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { DEFAULT_SITE_STATE } from './data/defaultData';
-import { CourseModule, FullSiteState, LabVideoItem } from './types/course';
+import {
+  CourseModule,
+  FullSiteState,
+  LabVideoItem,
+  StudentUser,
+} from './types/course';
 import { TopMarquee } from './components/TopMarquee';
 import { Navbar } from './components/Navbar';
 import { HeroPromoBanner } from './components/HeroPromoBanner';
@@ -16,11 +21,19 @@ import { InstructorBioSection } from './components/InstructorBioSection';
 import { Footer } from './components/Footer';
 import { CoursePlayerModal } from './components/CoursePlayerModal';
 import { AdminDashboard } from './components/AdminDashboard';
+import { UserAuthModal } from './components/UserAuthModal';
 import {
   getEnvAdminPasswordHash,
   hashAdminPassword,
   sanitizeImageSrc,
 } from './utils/security';
+import {
+  clearUserSession,
+  loadUserSession,
+  resolveActiveUser,
+  saveUserSession,
+  StoredUserSession,
+} from './utils/userAuth';
 
 const LS_STATE_KEY = 'zerotofab_site_state_v3';
 const LS_COMPLETED_KEY = 'tracecraft_completed_v1';
@@ -89,6 +102,9 @@ function loadInitialState(): {
             passcodeEnabled,
             passcodeHash: sanitizedHash,
           },
+          users: Array.isArray(parsed.users)
+            ? parsed.users
+            : DEFAULT_SITE_STATE.users,
         },
         legacyCustomPasscode: hasLegacyCustom ? rawSec?.passcode : undefined,
       };
@@ -99,10 +115,37 @@ function loadInitialState(): {
   return { state: DEFAULT_SITE_STATE };
 }
 
+function readCompletedLessons(storageKey: string): string[] {
+  try {
+    const saved = localStorage.getItem(storageKey);
+    const parsed = saved ? JSON.parse(saved) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 export function App() {
   const [initial] = useState(loadInitialState);
   const [siteState, setSiteState] = useState<FullSiteState>(initial.state);
   const [isAdminRoute, setIsAdminRoute] = useState<boolean>(isAdminLocation);
+  const [userSession, setUserSession] = useState<StoredUserSession | null>(
+    loadUserSession
+  );
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+
+  const currentUser = resolveActiveUser(siteState.users, userSession);
+  const completedStorageKey = currentUser
+    ? `${LS_COMPLETED_KEY}_${currentUser.id}`
+    : LS_COMPLETED_KEY;
+
+  // Clear stale session if the user was deleted or suspended by Admin
+  useEffect(() => {
+    if (userSession && !currentUser) {
+      clearUserSession();
+      setUserSession(null);
+    }
+  }, [userSession, currentUser]);
 
   // Migrate any legacy non-default plaintext passcode to PBKDF2 hash and scrub plaintext
   useEffect(() => {
@@ -124,14 +167,13 @@ export function App() {
     };
   }, [initial.legacyCustomPasscode]);
 
-  const [completedLessonIds, setCompletedLessonIds] = useState<string[]>(() => {
-    try {
-      const saved = localStorage.getItem(LS_COMPLETED_KEY);
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
+  const [completedLessonIds, setCompletedLessonIds] = useState<string[]>(() =>
+    readCompletedLessons(completedStorageKey)
+  );
+
+  useEffect(() => {
+    setCompletedLessonIds(readCompletedLessons(completedStorageKey));
+  }, [completedStorageKey]);
 
   const [activeCourse, setActiveCourse] = useState<CourseModule | null>(null);
 
@@ -166,17 +208,6 @@ export function App() {
     }
     link.href = iconHref;
   }, [siteState.profile.brandName, siteState.profile.heroTitle, siteState.profile.siteIconDataUrl]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(
-        LS_COMPLETED_KEY,
-        JSON.stringify(completedLessonIds)
-      );
-    } catch {
-      // ignore
-    }
-  }, [completedLessonIds]);
 
   const handleUpdateState = (patch: Partial<FullSiteState>) => {
     setSiteState((prev) => ({
@@ -266,11 +297,32 @@ export function App() {
   };
 
   const handleToggleComplete = (lessonId: string) => {
-    setCompletedLessonIds((prev) =>
-      prev.includes(lessonId)
+    setCompletedLessonIds((prev) => {
+      const next = prev.includes(lessonId)
         ? prev.filter((id) => id !== lessonId)
-        : [...prev, lessonId]
-    );
+        : [...prev, lessonId];
+      try {
+        localStorage.setItem(completedStorageKey, JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  };
+
+  const handleAuthenticated = (
+    user: StudentUser,
+    updatedUsers: StudentUser[]
+  ) => {
+    saveUserSession(user);
+    setUserSession({ userId: user.id, email: user.email });
+    setSiteState((prev) => ({ ...prev, users: updatedUsers }));
+    setAuthModalOpen(false);
+  };
+
+  const handleLogout = () => {
+    clearUserSession();
+    setUserSession(null);
   };
 
   return (
@@ -280,7 +332,11 @@ export function App() {
       <Navbar
         brandName={profile.brandName}
         siteIconUrl={profile.siteIconDataUrl}
+        currentUser={currentUser}
+        courses={courses}
         onOpenFirstCourse={() => handleOpenModuleById(courses[0]?.id)}
+        onOpenAuthModal={() => setAuthModalOpen(true)}
+        onLogout={handleLogout}
       />
 
       <main>
@@ -331,7 +387,9 @@ export function App() {
             countdownEndIso={sections.countdownEndIso}
             courses={courses}
             completedLessonIds={completedLessonIds}
+            currentUser={currentUser}
             onSelectCourse={(course) => setActiveCourse(course)}
+            onOpenAuthModal={() => setAuthModalOpen(true)}
           />
         )}
 
@@ -382,9 +440,22 @@ export function App() {
       <CoursePlayerModal
         course={activeCourse}
         driveConfig={driveConfig}
+        currentUser={currentUser}
         completedLessonIds={completedLessonIds}
         onToggleComplete={handleToggleComplete}
+        onOpenAuthModal={() => setAuthModalOpen(true)}
         onClose={() => setActiveCourse(null)}
+      />
+
+      <UserAuthModal
+        isOpen={authModalOpen}
+        currentUser={currentUser}
+        users={siteState.users}
+        courses={courses}
+        onAuthenticated={handleAuthenticated}
+        onLogout={handleLogout}
+        onSelectCourse={(course) => setActiveCourse(course)}
+        onClose={() => setAuthModalOpen(false)}
       />
     </div>
   );
