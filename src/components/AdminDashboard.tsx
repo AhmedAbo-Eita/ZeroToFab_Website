@@ -449,7 +449,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         {/* Active Panel */}
         <main className="lg:col-span-9 min-w-0">
           {toast && (
-            <div className="mb-6 px-4 py-3 bg-[#D97757] text-[#141413] border-2 border-[#141413] rounded-lg font-bold text-sm flex items-center gap-2 shadow-[4px_4px_0px_#141413]">
+            <div
+              role="status"
+              aria-live="polite"
+              className="fixed bottom-5 right-5 z-50 max-w-md px-4 py-3 bg-[#D97757] text-[#141413] border-2 border-[#141413] rounded-lg font-bold text-sm flex items-center gap-2 shadow-[4px_4px_0px_#141413]"
+            >
               <Check className="w-4 h-4 shrink-0" />
               <span>{toast}</span>
             </div>

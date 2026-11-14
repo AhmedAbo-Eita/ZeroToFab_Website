@@ -1,15 +1,18 @@
 import React, { useState } from 'react';
 import {
+  AlertCircle,
   ArrowDown,
   ArrowUp,
   Check,
   FolderPlus,
   HardDrive,
+  Pencil,
   Plus,
   Trash2,
   Upload,
   UploadCloud,
   Video,
+  X,
 } from 'lucide-react';
 import {
   CourseLevel,
@@ -59,13 +62,14 @@ export const AdminCoursesPanel: React.FC<AdminCoursesPanelProps> = ({
     useState<CourseModule['thumbnailTheme']>('4layer');
   const [newTags, setNewTags] = useState('KiCad 8, 4-Layer, DFM');
 
-  // Add Lesson Form
+  // Add / Edit Lesson Form
+  const [editingLessonId, setEditingLessonId] = useState<string | null>(null);
   const [lesTitle, setLesTitle] = useState('');
   const [lesDuration, setLesDuration] = useState('18:00');
   const [lesSummary, setLesSummary] = useState('');
   const [lesNotes, setLesNotes] = useState('');
   const [videoSource, setVideoSource] = useState<
-    'gdrive-link' | 'gdrive-upload' | 'local' | 'youtube' | 'mp4'
+    'gdrive-link' | 'gdrive-upload' | 'local' | 'youtube' | 'mp4' | 'demo'
   >('gdrive-link');
   const [driveUrlInput, setDriveUrlInput] = useState('');
   const [driveOnDemand, setDriveOnDemand] = useState(
@@ -76,13 +80,47 @@ export const AdminCoursesPanel: React.FC<AdminCoursesPanelProps> = ({
   );
   const [externalUrl, setExternalUrl] = useState('');
   const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [existingVideoMediaKey, setExistingVideoMediaKey] = useState<
+    string | undefined
+  >(undefined);
+  const [editingAttachments, setEditingAttachments] = useState<
+    ResourceAttachment[]
+  >([]);
   const [attachmentFiles, setAttachmentFiles] = useState<File[]>([]);
   const [lesFreePreview, setLesFreePreview] = useState(false);
+  const [lessonError, setLessonError] = useState<string | null>(null);
+  const [fileInputResetKey, setFileInputResetKey] = useState(0);
   const [uploading, setUploading] = useState(false);
   const [uploadPct, setUploadPct] = useState(0);
 
   const selectedCourse =
     courses.find((c) => c.id === selectedCourseId) || courses[0];
+
+  const resetLessonForm = () => {
+    setEditingLessonId(null);
+    setLesTitle('');
+    setLesDuration('18:00');
+    setLesSummary('');
+    setLesNotes('');
+    setVideoSource('gdrive-link');
+    setDriveUrlInput('');
+    setDriveOnDemand(driveConfig.defaultOnDemand);
+    setExternalUrl('');
+    setVideoFile(null);
+    setExistingVideoMediaKey(undefined);
+    setEditingAttachments([]);
+    setAttachmentFiles([]);
+    setLesFreePreview(false);
+    setLessonError(null);
+    setFileInputResetKey((k) => k + 1);
+  };
+
+  const handleSelectCourse = (courseId: string) => {
+    if (courseId !== selectedCourse?.id) {
+      resetLessonForm();
+    }
+    setSelectedCourseId(courseId);
+  };
 
   const handleCourseFieldChange = (
     id: string,
@@ -170,39 +208,101 @@ export const AdminCoursesPanel: React.FC<AdminCoursesPanelProps> = ({
     onNotify('Course deleted.');
   };
 
-  const handleAddLesson = async (e: React.FormEvent) => {
+  const handleStartEditLesson = (lesson: Lesson) => {
+    setEditingLessonId(lesson.id);
+    setLesTitle(lesson.title);
+    setLesDuration(lesson.duration);
+    setLesSummary(lesson.summary);
+    setLesNotes(lesson.notes);
+    setLesFreePreview(Boolean(lesson.isFreePreview));
+    setEditingAttachments(lesson.attachments || []);
+    setAttachmentFiles([]);
+    setVideoFile(null);
+    setLessonError(null);
+    setFileInputResetKey((k) => k + 1);
+
+    if (lesson.videoType === 'gdrive') {
+      setVideoSource('gdrive-link');
+      setDriveUrlInput(lesson.driveFileId || lesson.videoUrl || '');
+      setDriveOnDemand(
+        lesson.driveRequestOnDemand ?? driveConfig.defaultOnDemand
+      );
+      setExternalUrl('');
+      setExistingVideoMediaKey(undefined);
+    } else if (lesson.videoType === 'uploaded') {
+      setVideoSource('local');
+      setExistingVideoMediaKey(lesson.videoMediaKey);
+      setDriveUrlInput('');
+      setExternalUrl('');
+    } else if (lesson.videoType === 'youtube' || lesson.videoType === 'mp4') {
+      setVideoSource(lesson.videoType);
+      setExternalUrl(lesson.videoUrl || '');
+      setDriveUrlInput('');
+      setExistingVideoMediaKey(undefined);
+    } else {
+      setVideoSource('demo');
+      setDriveUrlInput('');
+      setExternalUrl('');
+      setExistingVideoMediaKey(undefined);
+    }
+
+    document
+      .getElementById('lesson-editor-form')
+      ?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  };
+
+  const handleSaveLesson = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedCourse || !lesTitle.trim()) return;
+    setLessonError(null);
+
+    if (!selectedCourse) return;
+    if (!lesTitle.trim()) {
+      const msg = 'Please enter a Lesson Title.';
+      setLessonError(msg);
+      onNotify(msg);
+      return;
+    }
+
+    const failValidation = (msg: string) => {
+      setLessonError(msg);
+      onNotify(msg);
+      setUploading(false);
+    };
 
     setUploading(true);
     setUploadPct(0);
     try {
-      const lessonId = `les-${Date.now()}`;
+      const lessonId = editingLessonId || `les-${Date.now()}`;
       let videoType: Lesson['videoType'] = 'demo';
       let driveFileId: string | undefined;
       let videoMediaKey: string | undefined;
       let videoUrl: string | undefined;
 
       if (videoSource === 'gdrive-link') {
+        if (/\/folders\//i.test(driveUrlInput)) {
+          failValidation(
+            'That is a Google Drive folder link (/folders/...). Open the specific video file in Google Drive -> Share -> Copy link (/file/d/.../view) and paste the file link here.'
+          );
+          return;
+        }
         const extracted = extractGoogleDriveFileId(driveUrlInput);
         if (!extracted) {
-          onNotify('Please paste a valid Google Drive share link or File ID.');
-          setUploading(false);
+          failValidation(
+            'Please paste a valid Google Drive file share link (https://drive.google.com/file/d/.../view) or File ID.'
+          );
           return;
         }
         videoType = 'gdrive';
         driveFileId = extracted;
       } else if (videoSource === 'gdrive-upload') {
         if (!videoFile) {
-          onNotify('Please select a video file to upload to Google Drive.');
-          setUploading(false);
+          failValidation('Please select a video file to upload to Google Drive.');
           return;
         }
         if (!driveConfig.clientId.trim()) {
-          onNotify(
-            'Set your Google OAuth Client ID in Settings & Google Drive tab first (or use "Google Drive Link").'
+          failValidation(
+            'Set your Google OAuth Client ID in Settings & Google Drive tab first (or use "Google Drive Link / ID").'
           );
-          setUploading(false);
           return;
         }
         const token = await requestGoogleDriveToken(driveConfig.clientId);
@@ -216,37 +316,41 @@ export const AdminCoursesPanel: React.FC<AdminCoursesPanelProps> = ({
         videoType = 'gdrive';
         driveFileId = uploaded.fileId;
       } else if (videoSource === 'local') {
-        if (!videoFile) {
-          onNotify('Please choose a local video file.');
-          setUploading(false);
+        if (videoFile) {
+          videoMediaKey = `vid-${lessonId}-${Date.now()}`;
+          await saveMediaBlob(videoMediaKey, videoFile);
+          videoType = 'uploaded';
+        } else if (editingLessonId && existingVideoMediaKey) {
+          videoMediaKey = existingVideoMediaKey;
+          videoType = 'uploaded';
+        } else {
+          failValidation('Please choose a local video file.');
           return;
         }
-        videoMediaKey = `vid-${lessonId}`;
-        await saveMediaBlob(videoMediaKey, videoFile);
-        videoType = 'uploaded';
       } else if (videoSource === 'youtube' || videoSource === 'mp4') {
         // Reject non-http(s) protocols (e.g. javascript:, data:) before saving lesson links
         const safeUrl = sanitizeExternalUrl(externalUrl);
         if (!safeUrl) {
-          onNotify(
+          failValidation(
             videoSource === 'youtube'
               ? 'Please enter a valid http(s) YouTube URL.'
               : 'Please enter a valid http(s) MP4 URL.'
           );
-          setUploading(false);
           return;
         }
         videoType = videoSource;
         videoUrl = safeUrl;
+      } else if (videoSource === 'demo') {
+        videoType = 'demo';
       }
 
-      const attachments: ResourceAttachment[] = [];
+      const uploadedAttachments: ResourceAttachment[] = [];
       for (let i = 0; i < attachmentFiles.length; i++) {
         const f = attachmentFiles[i];
-        const key = `att-${lessonId}-${i}`;
+        const key = `att-${lessonId}-${Date.now()}-${i}`;
         await saveMediaBlob(key, f);
         const lower = f.name.toLowerCase();
-        attachments.push({
+        uploadedAttachments.push({
           id: key,
           name: f.name,
           type: lower.endsWith('.pdf')
@@ -261,7 +365,7 @@ export const AdminCoursesPanel: React.FC<AdminCoursesPanelProps> = ({
         });
       }
 
-      const newLesson: Lesson = {
+      const nextLesson: Lesson = {
         id: lessonId,
         title: lesTitle.trim(),
         duration: lesDuration.trim() || '15:00',
@@ -276,33 +380,35 @@ export const AdminCoursesPanel: React.FC<AdminCoursesPanelProps> = ({
         driveRequestOnDemand: driveOnDemand,
         videoMediaKey,
         videoUrl,
-        attachments,
+        attachments: [...editingAttachments, ...uploadedAttachments],
         isFreePreview: lesFreePreview,
       };
 
+      const isEditing = Boolean(editingLessonId);
       onUpdateCourses(
-        courses.map((c) =>
-          c.id === selectedCourse.id
-            ? { ...c, lessons: [...c.lessons, newLesson] }
-            : c
-        )
+        courses.map((c) => {
+          if (c.id !== selectedCourse.id) return c;
+          return {
+            ...c,
+            lessons: isEditing
+              ? c.lessons.map((l) => (l.id === editingLessonId ? nextLesson : l))
+              : [...c.lessons, nextLesson],
+          };
+        })
       );
 
-      setLesTitle('');
-      setLesSummary('');
-      setLesNotes('');
-      setDriveUrlInput('');
-      setExternalUrl('');
-      setVideoFile(null);
-      setAttachmentFiles([]);
-      setLesFreePreview(false);
+      resetLessonForm();
       onNotify(
-        videoType === 'gdrive'
+        isEditing
+          ? 'Lesson updated!'
+          : videoType === 'gdrive'
           ? 'Google Drive video lesson published (on-demand streaming enabled)!'
           : 'Lesson added to course!'
       );
     } catch (err) {
-      onNotify(err instanceof Error ? err.message : 'Upload failed.');
+      const msg = err instanceof Error ? err.message : 'Upload failed.';
+      setLessonError(msg);
+      onNotify(msg);
     } finally {
       setUploading(false);
       setUploadPct(0);
@@ -310,6 +416,9 @@ export const AdminCoursesPanel: React.FC<AdminCoursesPanelProps> = ({
   };
 
   const handleDeleteLesson = (courseId: string, lessonId: string) => {
+    if (editingLessonId === lessonId) {
+      resetLessonForm();
+    }
     onUpdateCourses(
       courses.map((c) =>
         c.id === courseId
@@ -616,6 +725,46 @@ export const AdminCoursesPanel: React.FC<AdminCoursesPanelProps> = ({
                       className="w-full px-2.5 py-1.5 bg-[#FAF9F5] border border-[#141413] rounded text-sm"
                     />
                   </div>
+
+                  <div>
+                    <label className="block font-mono text-[10px] font-bold uppercase text-[#5C5A54] mb-1">
+                      Tags (comma-separated)
+                    </label>
+                    <input
+                      type="text"
+                      value={course.tags.join(', ')}
+                      onChange={(e) =>
+                        handleCourseFieldChange(course.id, {
+                          tags: e.target.value
+                            .split(',')
+                            .map((t) => t.trim())
+                            .filter(Boolean),
+                        })
+                      }
+                      className="w-full px-2.5 py-1.5 bg-[#FAF9F5] border border-[#141413] rounded text-xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-mono text-[10px] font-bold uppercase text-[#5C5A54] mb-1">
+                      Thumbnail Theme
+                    </label>
+                    <select
+                      value={course.thumbnailTheme}
+                      onChange={(e) =>
+                        handleCourseFieldChange(course.id, {
+                          thumbnailTheme: e.target
+                            .value as CourseModule['thumbnailTheme'],
+                        })
+                      }
+                      className="w-full px-2.5 py-1.5 bg-[#FAF9F5] border border-[#141413] rounded text-xs font-bold"
+                    >
+                      <option value="schematic">Schematic</option>
+                      <option value="4layer">4-Layer</option>
+                      <option value="highspeed">High-Speed</option>
+                      <option value="dfm">DFM</option>
+                    </select>
+                  </div>
                 </div>
 
                 <div className="flex items-center justify-between pt-2 border-t border-[#E8E6DC]">
@@ -628,7 +777,7 @@ export const AdminCoursesPanel: React.FC<AdminCoursesPanelProps> = ({
                   </span>
                   <button
                     type="button"
-                    onClick={() => setSelectedCourseId(course.id)}
+                    onClick={() => handleSelectCourse(course.id)}
                     className={`px-3 py-1 text-xs font-bold rounded border border-[#141413] cursor-pointer ${
                       isSelected
                         ? 'bg-[#141413] text-[#FAF9F5]'
@@ -788,7 +937,7 @@ export const AdminCoursesPanel: React.FC<AdminCoursesPanelProps> = ({
             </div>
             <select
               value={selectedCourse.id}
-              onChange={(e) => setSelectedCourseId(e.target.value)}
+              onChange={(e) => handleSelectCourse(e.target.value)}
               className="px-3 py-2 bg-[#FAF9F5] border-2 border-[#141413] rounded font-bold text-sm"
             >
               {courses.map((c) => (
@@ -810,55 +959,103 @@ export const AdminCoursesPanel: React.FC<AdminCoursesPanelProps> = ({
                   No lessons yet. Upload your first lesson on the right.
                 </p>
               ) : (
-                selectedCourse.lessons.map((l, idx) => (
-                  <div
-                    key={l.id}
-                    className="p-3.5 bg-[#FAF9F5] border-2 border-[#141413] rounded-lg flex items-start justify-between gap-3"
-                  >
-                    <div className="min-w-0">
-                      <div className="font-bold text-sm">
-                        {idx + 1}. {l.title}
+                selectedCourse.lessons.map((l, idx) => {
+                  const isEditingThis = editingLessonId === l.id;
+                  return (
+                    <div
+                      key={l.id}
+                      className={`p-3.5 border-2 rounded-lg flex items-start justify-between gap-3 transition-colors ${
+                        isEditingThis
+                          ? 'bg-[#FFF5F0] border-[#C96442]'
+                          : 'bg-[#FAF9F5] border-[#141413]'
+                      }`}
+                    >
+                      <div className="min-w-0">
+                        <div className="font-bold text-sm">
+                          {idx + 1}. {l.title}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 mt-1 font-mono text-[11px] text-[#5C5A54]">
+                          <span>{l.duration}</span>
+                          <span className="px-1.5 py-0.5 bg-[#141413] text-[#FAF9F5] rounded text-[10px]">
+                            {l.videoType === 'gdrive'
+                              ? `G-DRIVE (${l.driveRequestOnDemand ? 'ON-DEMAND' : 'AUTO'})`
+                              : l.videoType.toUpperCase()}
+                          </span>
+                          {l.attachments.length > 0 && (
+                            <span className="px-1.5 py-0.5 bg-[#F0EEE6] border border-[#141413] rounded text-[10px] font-bold">
+                              {l.attachments.length} FILE
+                              {l.attachments.length === 1 ? '' : 'S'}
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleToggleLessonPreview(selectedCourse.id, l.id)
+                            }
+                            title="Toggle Free Preview access for this lesson"
+                            className={`px-1.5 py-0.5 border border-[#141413] rounded text-[10px] font-bold cursor-pointer transition-colors ${
+                              l.isFreePreview
+                                ? 'bg-[#D97757] text-[#141413]'
+                                : 'bg-[#FFFFFF] text-[#5C5A54] hover:bg-[#F0EEE6]'
+                            }`}
+                          >
+                            {l.isFreePreview ? 'FREE PREVIEW' : 'LOCKED (PRO)'}
+                          </button>
+                        </div>
                       </div>
-                      <div className="flex flex-wrap items-center gap-2 mt-1 font-mono text-[11px] text-[#5C5A54]">
-                        <span>{l.duration}</span>
-                        <span className="px-1.5 py-0.5 bg-[#141413] text-[#FAF9F5] rounded text-[10px]">
-                          {l.videoType === 'gdrive'
-                            ? `G-DRIVE (${l.driveRequestOnDemand ? 'ON-DEMAND' : 'AUTO'})`
-                            : l.videoType.toUpperCase()}
-                        </span>
+                      <div className="flex items-center gap-1 shrink-0">
                         <button
                           type="button"
-                          onClick={() =>
-                            handleToggleLessonPreview(selectedCourse.id, l.id)
-                          }
-                          title="Toggle Free Preview access for this lesson"
-                          className={`px-1.5 py-0.5 border border-[#141413] rounded text-[10px] font-bold cursor-pointer transition-colors ${
-                            l.isFreePreview
-                              ? 'bg-[#D97757] text-[#141413]'
-                              : 'bg-[#FFFFFF] text-[#5C5A54] hover:bg-[#F0EEE6]'
+                          onClick={() => handleStartEditLesson(l)}
+                          title="Edit lesson details & video"
+                          aria-label={`Edit ${l.title}`}
+                          className={`p-1.5 rounded cursor-pointer border ${
+                            isEditingThis
+                              ? 'bg-[#141413] text-[#FAF9F5] border-[#141413]'
+                              : 'text-[#141413] border-transparent hover:bg-[#F0EEE6] hover:border-[#141413]'
                           }`}
                         >
-                          {l.isFreePreview ? 'FREE PREVIEW' : 'LOCKED (PRO)'}
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteLesson(selectedCourse.id, l.id)}
+                          title="Delete lesson"
+                          aria-label={`Delete ${l.title}`}
+                          className="p-1.5 text-red-700 hover:bg-red-50 rounded cursor-pointer"
+                        >
+                          <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteLesson(selectedCourse.id, l.id)}
-                      className="p-1.5 text-red-700 hover:bg-red-50 rounded cursor-pointer"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
 
-            {/* Add / Upload Lesson Form (with Google Drive Direct Upload + Link!) */}
-            <form onSubmit={handleAddLesson} className="lg:col-span-7 space-y-4">
-              <h4 className="font-mono text-xs font-bold uppercase text-[#C96442]">
-                Upload New Lesson Video
-              </h4>
+            {/* Add / Edit Lesson Form (with Google Drive Direct Upload + Link!) */}
+            <form
+              id="lesson-editor-form"
+              onSubmit={handleSaveLesson}
+              className="lg:col-span-7 space-y-4"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h4 className="font-mono text-xs font-bold uppercase text-[#C96442]">
+                  {editingLessonId
+                    ? 'Edit Existing Lesson'
+                    : 'Upload New Lesson Video'}
+                </h4>
+                {editingLessonId && (
+                  <button
+                    type="button"
+                    onClick={resetLessonForm}
+                    className="px-2.5 py-1 text-xs font-bold bg-[#FAF9F5] hover:bg-[#F0EEE6] border border-[#141413] rounded inline-flex items-center gap-1 cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                    <span>Cancel Edit</span>
+                  </button>
+                )}
+              </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="sm:col-span-2">
@@ -869,7 +1066,10 @@ export const AdminCoursesPanel: React.FC<AdminCoursesPanelProps> = ({
                     type="text"
                     required
                     value={lesTitle}
-                    onChange={(e) => setLesTitle(e.target.value)}
+                    onChange={(e) => {
+                      setLesTitle(e.target.value);
+                      if (lessonError) setLessonError(null);
+                    }}
                     placeholder="e.g. DDR4 Fly-By Length Matching"
                     className="w-full px-3 py-2 bg-[#FAF9F5] border-2 border-[#141413] rounded text-sm"
                   />
@@ -901,13 +1101,17 @@ export const AdminCoursesPanel: React.FC<AdminCoursesPanelProps> = ({
                     { id: 'local', label: 'Local Browser Upload' },
                     { id: 'youtube', label: 'YouTube Link' },
                     { id: 'mp4', label: 'Direct MP4 URL' },
+                    ...(editingLessonId && videoSource === 'demo'
+                      ? [{ id: 'demo', label: 'Keep Demo Video' }]
+                      : []),
                   ].map((opt) => (
                     <button
                       key={opt.id}
                       type="button"
-                      onClick={() =>
-                        setVideoSource(opt.id as typeof videoSource)
-                      }
+                      onClick={() => {
+                        setVideoSource(opt.id as typeof videoSource);
+                        if (lessonError) setLessonError(null);
+                      }}
                       className={`px-3 py-1.5 text-xs font-bold border-2 border-[#141413] rounded cursor-pointer ${
                         videoSource === opt.id
                           ? 'bg-[#D97757] text-[#141413]'
@@ -924,10 +1128,27 @@ export const AdminCoursesPanel: React.FC<AdminCoursesPanelProps> = ({
                     <input
                       type="text"
                       value={driveUrlInput}
-                      onChange={(e) => setDriveUrlInput(e.target.value)}
-                      placeholder="Paste Google Drive link (https://drive.google.com/file/d/.../view) or File ID"
+                      onChange={(e) => {
+                        setDriveUrlInput(e.target.value);
+                        if (lessonError) setLessonError(null);
+                      }}
+                      placeholder="Paste Google Drive FILE link (https://drive.google.com/file/d/.../view) or File ID"
                       className="w-full px-3 py-2 bg-[#FFFFFF] border-2 border-[#141413] rounded text-sm"
                     />
+                    {/\/folders\//i.test(driveUrlInput) ? (
+                      <div className="p-2.5 bg-red-50 border border-red-700 rounded text-xs text-red-900 font-medium flex items-start gap-2">
+                        <AlertCircle className="w-4 h-4 text-red-700 shrink-0 mt-0.5" />
+                        <span>
+                          Folder links (<code>/folders/...</code>) cannot be played directly. Open the video file inside that folder, click{' '}
+                          <strong>Share → Copy link</strong> (it should contain{' '}
+                          <code>/file/d/...</code>), and paste it here.
+                        </span>
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-[#5C5A54]">
+                        Use a single video <strong>file</strong> share link (<code>/file/d/.../view</code>) or File ID — not a folder URL. Set file sharing to &quot;Anyone with the link&quot;.
+                      </p>
+                    )}
                     <label className="inline-flex items-center gap-2 text-xs font-bold cursor-pointer">
                       <input
                         type="checkbox"
@@ -1002,24 +1223,37 @@ export const AdminCoursesPanel: React.FC<AdminCoursesPanelProps> = ({
                     <span className="text-xs font-bold">
                       {videoFile
                         ? `${videoFile.name} (${formatFileSize(videoFile.size)})`
+                        : editingLessonId && existingVideoMediaKey
+                        ? 'Current local video saved — click to replace (.mp4 / .webm)'
                         : 'Select local video file (.mp4 / .webm)'}
                     </span>
                     <input
+                      key={`local-${fileInputResetKey}`}
                       type="file"
                       accept="video/*"
                       className="hidden"
-                      onChange={(e) =>
-                        setVideoFile(e.target.files?.[0] || null)
-                      }
+                      onChange={(e) => {
+                        setVideoFile(e.target.files?.[0] || null);
+                        if (lessonError) setLessonError(null);
+                      }}
                     />
                   </label>
+                )}
+
+                {videoSource === 'demo' && (
+                  <p className="text-xs text-[#5C5A54] bg-[#FFFFFF] p-3 border border-[#141413] rounded">
+                    Using built-in interactive demo video placeholder. Pick another source above whenever you want to attach a real video.
+                  </p>
                 )}
 
                 {(videoSource === 'youtube' || videoSource === 'mp4') && (
                   <input
                     type="url"
                     value={externalUrl}
-                    onChange={(e) => setExternalUrl(e.target.value)}
+                    onChange={(e) => {
+                      setExternalUrl(e.target.value);
+                      if (lessonError) setLessonError(null);
+                    }}
                     placeholder={
                       videoSource === 'youtube'
                         ? 'https://www.youtube.com/watch?v=...'
@@ -1056,11 +1290,41 @@ export const AdminCoursesPanel: React.FC<AdminCoursesPanelProps> = ({
                 />
               </div>
 
-              <div>
+              <div className="space-y-2">
                 <label className="block font-mono text-[11px] font-bold uppercase mb-1">
                   Attach Gerbers, BOM, Schematics or PDFs
                 </label>
+                {editingAttachments.length > 0 && (
+                  <div className="space-y-1.5">
+                    {editingAttachments.map((att) => (
+                      <div
+                        key={att.id}
+                        className="flex items-center justify-between gap-2 px-3 py-1.5 bg-[#FAF9F5] border border-[#141413] rounded text-xs"
+                      >
+                        <span className="truncate font-bold">
+                          {att.name}{' '}
+                          <span className="font-mono font-normal text-[#5C5A54]">
+                            ({att.sizeLabel})
+                          </span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setEditingAttachments((prev) =>
+                              prev.filter((item) => item.id !== att.id)
+                            )
+                          }
+                          title="Remove attachment"
+                          className="p-1 text-red-700 hover:bg-red-50 rounded cursor-pointer shrink-0"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <input
+                  key={`att-${fileInputResetKey}`}
                   type="file"
                   multiple
                   onChange={(e) =>
@@ -1082,20 +1346,46 @@ export const AdminCoursesPanel: React.FC<AdminCoursesPanelProps> = ({
                 </span>
               </label>
 
-              <button
-                type="submit"
-                disabled={uploading}
-                className="brutal-btn px-6 py-3 bg-[#D97757] text-[#141413] font-bold text-sm inline-flex items-center gap-2 cursor-pointer"
-              >
-                <UploadCloud className="w-4 h-4" />
-                <span>
-                  {uploading
-                    ? uploadPct > 0
-                      ? `Uploading to Google Drive (${uploadPct}%)...`
-                      : 'Publishing Lesson...'
-                    : 'Publish Lesson'}
-                </span>
-              </button>
+              {lessonError && (
+                <div
+                  role="alert"
+                  className="p-3 bg-red-50 border-2 border-red-700 rounded-lg text-xs text-red-900 font-bold flex items-start gap-2"
+                >
+                  <AlertCircle className="w-4 h-4 text-red-700 shrink-0 mt-0.5" />
+                  <span>{lessonError}</span>
+                </div>
+              )}
+
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="submit"
+                  disabled={uploading}
+                  className="brutal-btn px-6 py-3 bg-[#D97757] text-[#141413] font-bold text-sm inline-flex items-center gap-2 cursor-pointer"
+                >
+                  <UploadCloud className="w-4 h-4" />
+                  <span>
+                    {uploading
+                      ? uploadPct > 0
+                        ? `Uploading to Google Drive (${uploadPct}%)...`
+                        : editingLessonId
+                        ? 'Saving Lesson...'
+                        : 'Publishing Lesson...'
+                      : editingLessonId
+                      ? 'Save Lesson Changes'
+                      : 'Publish Lesson'}
+                  </span>
+                </button>
+                {editingLessonId && (
+                  <button
+                    type="button"
+                    onClick={resetLessonForm}
+                    disabled={uploading}
+                    className="px-4 py-3 bg-[#FAF9F5] hover:bg-[#F0EEE6] text-[#141413] border-2 border-[#141413] rounded font-bold text-sm cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                )}
+              </div>
             </form>
           </div>
         </div>
